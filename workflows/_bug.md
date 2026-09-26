@@ -74,7 +74,7 @@ gh pr list --search "{{ issue.identifier }} in:title" --state all --json number,
 1. Make the **minimal change** that fixes the root cause.
 2. Do NOT refactor surrounding code unless directly required by the fix.
 3. New code follows `CLAUDE.md` (Swift + Combine, async/await, MVVM).
-4. If the proper fix needs structural change beyond minimal scope, fix minimally and file a separate Backlog ticket.
+4. If the proper fix needs structural change beyond minimal scope, fix minimally and file a separate `待辦事項` ticket.
 
 #### 3.3 Test the fix
 

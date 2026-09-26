@@ -152,7 +152,7 @@ A `jira` CLI is on your PATH (from `pipeline/bin/jira` in the main repo; credent
 - **Learning loop**: before asking a human, check `.claude/evaluation/agent-learning-log.md` along with Jira/attachments/links/codebase. After RD answers a reusable clarification, or after a repeated blocker/review miss, add or update a generic learning entry.
 - Treat a single persistent Jira workpad comment as the source of truth for progress; do not post separate "done"/summary comments.
 - Treat any ticket-authored `Validation`, `Test Plan`, or `Testing` section as non-negotiable acceptance input.
-- When meaningful out-of-scope improvements are discovered, file a separate Jira issue in `Backlog` instead of expanding scope.
+- When meaningful out-of-scope improvements are discovered, file a separate Jira issue in `待辦事項` instead of expanding scope.
 - Operate autonomously end-to-end unless blocked by missing requirements, secrets, or permissions.
 
 ## Ticket intake
@@ -161,14 +161,18 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
 
 ## Status map
 
+> **SID board (current)**: `待辦事項` → `SA/SD` → `In Development` → `完成`. Transition names may differ from status names (e.g. `開始 SA/SD` / `SA/SD` → `SA/SD`, `To Do` → `待辦事項`) — always run `jira transitions` first.
+> `Code Review`, `Rework`, and `Waiting For QA` do not exist on the board yet. Their sections below apply once RD adds them. Until then: a feature stays in `In Development` after `Handoff to RD` and RD moves it to `完成`; for a bug, if `Code Review` is not an available transition, keep `In Development`, note it in the workpad, and still write `.pipeline/handoff.json`.
+> The SID project currently has no `Bug` issue type, so tickets route to the feature flow.
+
 | Jira Status | Feature | Bug |
 |-------------|---------|-----|
-| `Backlog` / `Pending` | → `SA/SD`, begin spec generation | → `In Development`, begin fix |
+| `待辦事項` | → `SA/SD`, begin spec generation | → `In Development`, begin fix |
 | `SA/SD` | AI produces spec → review halt in dashboard | N/A (bugs skip SA/SD) |
 | `In Development` | AI implements → push branch → tag assignee on workpad → `handoff.json` → shut down | AI investigates → fixes → PR with analysis → Jira → `Code Review` → `handoff.json` → shut down |
 | `Code Review` | **General phase**: wait for CI → `Waiting For QA` | **General phase**: wait for CI → `Waiting For QA` |
 | `Rework` | RD requests redo → restart from SA/SD or Implementation | RD requests redo → restart fix from scratch |
-| `Waiting For QA` / `Done` | Terminal; shut down | Terminal; shut down |
+| `完成` (/ `Waiting For QA`) | Terminal; shut down | Terminal; shut down |
 
 ## Step 0: Determine current ticket state and route
 
@@ -195,7 +199,7 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
 6. Route to the matching flow:
 
 **Feature routing:**
-- `Backlog` / `Pending` → transition to `SA/SD`, then start **Feature Step 1** (spec generation).
+- `待辦事項` → transition to `SA/SD`, then start **Feature Step 1** (spec generation).
 - `SA/SD` → check `.pipeline/spec_decision.json` and the Previous Discussion section:
   - **`decision: "approve"`** → **Feature Step 1.3** (transition to `In Development`, then implementation).
   - **`decision: "request_changes"`** → **Feature Step 1.2** (feedback sweep).
@@ -206,14 +210,14 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
   - Otherwise → continue **Feature Step 2** (implementation).
 - `Code Review` → run **General phase**.
 - `Rework` → run **Rework flow**.
-- `Waiting For QA` / `Done` → do nothing; shut down.
+- `完成` / `Waiting For QA` → do nothing; shut down.
 
 **Bug routing:**
-- `Backlog` / `Pending` / `SA/SD` → transition to `In Development`, then start **Bug Step 1**.
+- `待辦事項` / `SA/SD` → transition to `In Development`, then start **Bug Step 1**.
 - `In Development` → if workpad phase is `Handoff to RD` → shut down; otherwise continue the **Bug flow**.
 - `Code Review` → run **General phase**.
 - `Rework` → run **Rework flow**.
-- `Waiting For QA` / `Done` → do nothing; shut down.
+- `完成` / `Waiting For QA` → do nothing; shut down.
 
 7. Check whether a PR already exists for the current branch. If it is `CLOSED` or `MERGED`, create a fresh branch from `origin/{{ base_branch }}` and restart.
 
@@ -289,14 +293,14 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
 
 ## Guardrails
 
-- **Project rules first**: `CLAUDE.md` (Swift + Combine, Swift concurrency, MVVM). Bug fixes in existing code are fixed in place without refactoring; structural changes go into a separate Backlog ticket.
+- **Project rules first**: `CLAUDE.md` (Swift + Combine, Swift concurrency, MVVM). Bug fixes in existing code are fixed in place without refactoring; structural changes go into a separate `待辦事項` ticket.
 - **Target branch**: branches are based on `origin/{{ base_branch }}`.
 - Do not edit the Jira issue body for planning — use the workpad only.
 - Exactly one persistent workpad comment (`## Claude Workpad`) per issue.
 - **Feature**: AI pushes branch only (no PR, no Jira transition after `In Development`). RD creates the PR and manages Jira status.
 - **Bug**: AI pushes branch, creates PR with structured analysis, and transitions Jira to `Code Review`.
 - If blocked, record in workpad: what is missing, why it blocks, exact human action needed — and write `.pipeline/blocked.json`.
-- If state is terminal (`Done`, `Waiting For QA`), do nothing and shut down.
+- If state is terminal (`完成`, `Waiting For QA`), do nothing and shut down.
 - Never commit `.pipeline/`, `.build/`, credentials, or `pipeline/.env`.
 
 ## Workpad template

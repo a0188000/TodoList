@@ -5,9 +5,20 @@
   },
   "tracker": {
     "kind": "jira",
-    "active_states": ["Backlog", "Pending", "SA / SD", "SA/SD", "In Development", "Code Review", "Rework"],
-    "terminal_states": ["Done", "Closed", "Cancelled", "Waiting For QA"],
-    "recheck_states": ["Code Review"],
+    "active_states": [
+      "待辦事項",
+      "SA/SD",
+      "In Development",
+      "Code Review",
+      "Rework"
+    ],
+    "terminal_states": [
+      "完成",
+      "Waiting For QA"
+    ],
+    "recheck_states": [
+      "Code Review"
+    ],
     "recheck_interval_ms": 300000
   },
   "polling": {
@@ -15,7 +26,7 @@
     "interval_ms": 30000
   },
   "repo": {
-    "base_branch": "main",
+    "base_branch": "develop",
     "remote": "origin"
   },
   "workspace": {
@@ -34,7 +45,10 @@
   },
   "claude_code": {
     "command": "claude",
-    "permission_args": ["--permission-mode", "acceptEdits"],
+    "permission_args": [
+      "--permission-mode",
+      "acceptEdits"
+    ],
     "extra_args": []
   },
   "env": {

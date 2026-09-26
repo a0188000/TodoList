@@ -40,7 +40,7 @@ claude -p（stream-json）──寫出訊號檔──▶ <worktree>/.pipeline/
 2. **GitHub remote 與初始 commit**（worktree 需要 base branch 已存在；agent 需要 push）：
    ```bash
    git add -A && git commit -m "chore: add AI pipeline workflow"
-   gh repo create <name> --private --source . --push     # 或 git remote add origin ... && git push -u origin main
+   gh repo create <name> --private --source . --push     # 或 git remote add origin ... && git push -u origin develop
    ```
    `.claude/`、`WORKFLOW.md`、`workflows/` 必須 commit，worktree 內的 agent 才看得到 agents/skills。
 3. **gh 登入**：`gh auth status`（bug 流程會開 PR）。
@@ -64,7 +64,7 @@ python3 pipeline/server.py
 |------|------|
 | `tracker.active_states` / `terminal_states` | 對應你 Jira board 的狀態名稱（比對時忽略大小寫與空白） |
 | `tracker.recheck_states` | 這些狀態（預設 `Code Review`）閒置時會每 `recheck_interval_ms` 重新檢查 CI |
-| `repo.base_branch` | 預設 `main` |
+| `repo.base_branch` | 預設 `develop` |
 | `agent.max_continuations` | 狀態沒推進時自動續跑次數 |
 | `claude_code.permission_args` | 預設 `acceptEdits` + `.claude/settings.json` 白名單。若 log 常出現權限被拒而卡住，可改成 `["--permission-mode", "bypassPermissions"]`（風險：agent 可執行任何指令） |
 | `env.DEVELOPER_DIR` | 因 `xcode-select` 指向 CommandLineTools，這裡指定 Xcode 26.2 |
