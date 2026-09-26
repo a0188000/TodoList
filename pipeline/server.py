@@ -648,7 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             url = body.get("url", "").strip()
             m = KEY_RE.search(url) or KEY_RE.search(url.upper())
             if not m:
-                return self.error("找不到 Jira key（例如 KKAPP-1234），請貼上 ticket 連結或 key")
+                return self.error("找不到 Jira key（例如 SID-1234），請貼上 ticket 連結或 key")
             key = m.group(1)
             issue, err = fetch_issue(key)
             if err:
