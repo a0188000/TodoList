@@ -5,6 +5,7 @@
       "Bash(gh:*)",
       "Bash(jira:*)",
       "Bash(xcodebuild:*)",
+      "Bash(ios-build:*)",
       "Bash(xcrun:*)",
       "Bash(swiftformat:*)",
       "Bash(python3:*)",

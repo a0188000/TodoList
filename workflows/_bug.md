@@ -80,7 +80,7 @@ gh pr list --search "{{ issue.identifier }} in:title" --state all --json number,
 
 1. If a test target exists: write a test that reproduces the bug (it must fail before the fix), then run the **Test** command from "Project commands" — see `/test-driven-development`.
 2. If the ticket has a **Validation / Test Plan** section, execute it and record results.
-3. For UI bugs, capture a simulator screenshot of the fixed behavior under `RefDoc_Temp/{{ issue.identifier }}/validation/` (same `xcrun simctl` steps as the feature Validation Gate).
+3. For UI bugs, capture a simulator screenshot of the fixed behavior under `RefDoc_Temp/{{ issue.identifier }}/validation/` with `ios-build screenshot RefDoc_Temp/{{ issue.identifier }}/validation/<name>.png` (after `ios-build build`).
 
 #### 3.4 Compilation Gate (MANDATORY)
 
@@ -109,11 +109,9 @@ Run the **Format** command on changed Swift files (or record N/A).
 
 **Title**: `[{{ issue.identifier }}][iOS] {{ issue.title }}` — full Jira key, original Jira title, no `fix:` prefix.
 
-```bash
-gh pr create --base {{ base_branch }} \
-  --label ai-pipeline \
-  --title "[{{ issue.identifier }}][iOS] {{ issue.title }}" \
-  --body "$(cat <<'PREOF'
+1. Use the **Write** tool to create `.pipeline/pr-body.md` with this exact structure (in Chinese, except technical terms):
+
+```md
 ## Issue links
 
 - [Jira]({{ issue.url }})
@@ -155,8 +153,12 @@ gh pr create --base {{ base_branch }} \
 - [x/ ] Does it have anything to do with API?
 - [x/ ] Has the document been modified?
 - [x/ ] Were there any changes to the tests?
-PREOF
-)"
+```
+
+2. Create the PR (single command, no shell expansions):
+
+```bash
+gh pr create --base {{ base_branch }} --label ai-pipeline --title "[{{ issue.identifier }}][iOS] {{ issue.title }}" --body-file .pipeline/pr-body.md
 ```
 
 #### 4.3 Transition Jira to Code Review
@@ -189,9 +191,8 @@ jira transition {{ issue.identifier }} "Code Review"
    jira workpad {{ issue.identifier }} .pipeline/workpad.md --mention-assignee "Bug fix PR 已就緒，請 review。"
    ```
 3. Signal handoff:
-   ```bash
-   cat > .pipeline/handoff.json << EOF
+   Use the **Write** tool to create `.pipeline/handoff.json` with:
+   ```json
    {"phase": "Handoff to RD", "branch": "fix/{{ issue.identifier }}", "summary": "<one line root cause + fix>", "pr_url": "<PR url>"}
-   EOF
    ```
 4. **Shut down.** RD reviews the PR; when the ticket reaches `Code Review` the General phase takes over.

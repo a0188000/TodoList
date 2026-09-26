@@ -216,6 +216,7 @@ def build_prompt(t):
         "discussion_history": format_history(t),
         "flow": "bug" if is_bug else "feature",
         "workspace": t.get("workspace", ""),
+        "launch_mode": "pipeline",
         "base_branch": CONFIG["repo"]["base_branch"],
         "remote": CONFIG["repo"]["remote"],
     }
@@ -298,6 +299,23 @@ def handle_stream_line(key, run_id, line):
             log_line(key, run_id, "📋 " + str(ev["result"]).strip())
 
 
+def permission_list_args():
+    """Pass the repo's .claude/settings.json allow/deny lists on the command line.
+
+    Project settings are ignored until the folder is trusted in ~/.claude.json;
+    CLI flags always apply, so unattended runs don't depend on trust state."""
+    try:
+        perms = json.loads((REPO_ROOT / ".claude" / "settings.json").read_text()).get("permissions", {})
+    except (OSError, json.JSONDecodeError):
+        return []
+    args = []
+    if perms.get("allow"):
+        args += ["--allowedTools", ",".join(perms["allow"])]
+    if perms.get("deny"):
+        args += ["--disallowedTools", ",".join(perms["deny"])]
+    return args
+
+
 def agent_env(key):
     env = os.environ.copy()
     env.update(CONFIG.get("env", {}))
@@ -337,7 +355,7 @@ def dispatch(key):
     cc = CONFIG["claude_code"]
     cmd = [cc["command"], "-p", "--output-format", "stream-json", "--verbose",
            "--model", agent["model"], "--max-turns", str(agent["max_turns"]),
-           *cc.get("permission_args", []), *cc.get("extra_args", [])]
+           *cc.get("permission_args", []), *permission_list_args(), *cc.get("extra_args", [])]
     log_line(key, run_id, f"▶️ dispatch {key} status={t.get('jira_status')} attempt={t.get('attempt', 0)} ws={ws}")
     proc = subprocess.Popen(cmd, cwd=ws, env=agent_env(key), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)

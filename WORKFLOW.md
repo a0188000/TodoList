@@ -118,27 +118,25 @@ A `jira` CLI is on your PATH (from `pipeline/bin/jira` in the main repo; credent
 | Code Review | `@code-reviewer` | Both | Full self-review before handoff |
 | Before any completion claim | `/verification-before-completion` | Both | Evidence before claims |
 
-## Project commands (AI-Demo)
+## Project commands
 
 - Xcode project: `TodoList/TodoList.xcodeproj`, scheme `TodoList`. The project uses file-system synchronized groups — new `.swift` files placed under `TodoList/TodoList/` are picked up automatically (no pbxproj edits needed).
-- `DEVELOPER_DIR` is provided by the orchestrator. In manual mode, if `xcode-select -p` points to CommandLineTools, run `export DEVELOPER_DIR=/Applications/Xcode-26.2.0.app/Contents/Developer` first.
-- **Build** (use the Bash tool `timeout` of 600000 ms; retry up to 2 times on timeout):
-  ```bash
-  SIM_ID=$(xcrun simctl list devices available -j | python3 -c "
-  import sys, json
-  data = json.load(sys.stdin)
-  for runtime, devices in data['devices'].items():
-      if 'iOS' in runtime:
-          for d in devices:
-              if 'iPhone' in d['name'] and d['isAvailable']:
-                  print(d['udid']); sys.exit(0)
-  " 2>/dev/null)
-  set -o pipefail
-  xcodebuild build -project TodoList/TodoList.xcodeproj -scheme TodoList \
-    -destination "id=$SIM_ID" -derivedDataPath .build/DerivedData -quiet 2>&1 | tail -30
-  ```
-- **Test**: same command with `test` instead of `build` — only if a test target exists (`xcodebuild -list -project TodoList/TodoList.xcodeproj`). If none exists, record `N/A — no test target` and list it in the handoff "Remaining for RD" instead of silently skipping.
-- **Format**: `command -v swiftformat >/dev/null && swiftformat <changed swift files>`; if swiftformat is not installed, record `N/A — swiftformat not installed`.
+- `ios-build` (on PATH, from `pipeline/bin/ios-build`) wraps simulator selection, `DEVELOPER_DIR`, and derived data. Run it from the worktree root:
+  - **Build**: `ios-build build` (use the Bash tool `timeout` of 600000 ms; retry up to 2 times on timeout). Success prints `BUILD SUCCEEDED`.
+  - **Test**: `ios-build test`. Exit code 2 with `N/A — no test target` means there is no test target: record it and list it in the handoff "Remaining for RD" instead of silently skipping.
+  - **Run on simulator**: `ios-build run` (after a successful build).
+  - **Screenshot**: `ios-build screenshot RefDoc_Temp/<id>/validation/<AC-id>.png` (runs the app, waits 3 s, saves the screenshot).
+  - **Simulator id**: `ios-build sim`.
+- **Format**: `swiftformat <changed swift files>`; if `command -v swiftformat` prints nothing, record `N/A — swiftformat not installed`.
+
+## Shell command rules (unattended sessions)
+
+Commands containing shell expansions or redirections cannot be auto-approved in unattended mode and will be rejected. Therefore:
+
+- No `$VAR`, `${VAR}`, `$(...)`, backticks, `<<` heredocs, or `>` redirects in Bash commands. Run the command that produces a value on its own, then paste the literal value into the next command.
+- Create or edit files (workpad, signal JSON files, PR bodies, commit messages) with the **Write / Edit tools**, never with `cat > file` or `echo > file`.
+- Multi-line commit messages: write them to `.pipeline/commit-msg.txt` with Write, then `git commit -F .pipeline/commit-msg.txt`.
+- Prefer one simple command per Bash call; `&&` chains of allowed commands are fine.
 
 ## Default posture
 
@@ -178,10 +176,7 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
 
 1. **Detect launch mode**:
 
-   ```bash
-   if [ -n "$AI_PIPELINE" ]; then echo "LAUNCH_MODE=pipeline"; else echo "LAUNCH_MODE=manual"; fi
-   mkdir -p .pipeline
-   ```
+   Launch mode for this session: **`{{ launch_mode }}`**. If you see a literal template placeholder instead of `pipeline`, you were launched manually from the raw file → `LAUNCH_MODE=manual`. Then run `mkdir -p .pipeline`.
 
    - **`pipeline`**: dispatched by the local orchestrator (unattended). Review halts go through `.pipeline/discussion_request.json`.
    - **`manual`**: RD launched `claude` directly. At a review halt, print a `REVIEW POINT` message in chat (question + artifact paths + accepted verdicts `approve` / `request_changes` + comments / `reject`) and end the turn; the human's next chat reply is the verdict.
@@ -259,7 +254,7 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
 
 > Runs for **both Feature and Bug** when the ticket is in `Code Review`. The PR exists and CI may be running.
 
-1. Find the PR: `gh pr list --head "$(git branch --show-current)" --json number,state,url`.
+1. Find the PR: run `git branch --show-current`, then `gh pr list --head <that branch> --json number,state,url`.
 2. If no open PR exists, record it in the workpad and shut down (RD may not have created it yet).
 3. Check CI: `gh pr checks <pr-number>`.
    - **Green** (or the repo has no CI checks — record `N/A — no CI configured`): `jira transition {{ issue.identifier }} "Waiting For QA"`, add PR link + final status + delivery summary to the workpad, shut down.
@@ -273,7 +268,7 @@ A ticket enters this workflow when RD **adds its Jira link in the local dashboar
 - Spec is approved (explicit `approve` in `.pipeline/spec_decision.json` or chat).
 - All Implementation Phases from spec are completed.
 - All Acceptance Criteria have corresponding implementation.
-- Build passes (`xcodebuild build`).
+- Build passes (`ios-build build`).
 - Formatting done (or `N/A — swiftformat not installed`).
 - **All Acceptance Scenarios executed**: no unresolved FAILs; BLOCKED only with the exact missing prerequisite and any fallback evidence.
 - Handoff document committed to the branch (`RefDoc_Temp/{{ issue.identifier }}_handoff.md`) with validation evidence table.
@@ -329,8 +324,8 @@ SA/SD | In Development | Handoff to RD | Code Review
 - [ ] Criterion 1
 
 ### Validation
-- [ ] Build: `xcodebuild build ...`
-- [ ] Tests: `xcodebuild test ...` / N/A
+- [ ] Build: `ios-build build`
+- [ ] Tests: `ios-build test` / N/A
 - [ ] Format: `swiftformat` / N/A
 
 ### Notes

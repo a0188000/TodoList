@@ -1,0 +1,71 @@
+#!/bin/bash
+# Build / test / run helper for the AI pipeline, so agents never need shell
+# expansions ($VAR, $(...)) that unattended Claude Code sessions cannot approve.
+#
+# Usage (run from the repo or worktree root):
+#   ios-build sim                 print the chosen iPhone simulator UDID
+#   ios-build build               xcodebuild build
+#   ios-build test                xcodebuild test (fails clearly when there is no test target)
+#   ios-build run                 build products -> boot simulator, install, launch
+#   ios-build screenshot <path>   run, wait 3s, save a simulator screenshot to <path>
+set -euo pipefail
+
+PROJECT="TodoList/TodoList.xcodeproj"
+SCHEME="TodoList"
+DERIVED=".build/DerivedData"
+
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -z "${DEVELOPER_DIR:-}" ] && xcode-select -p | grep -q CommandLineTools; then
+  XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | grep -v Xcodes.app | head -1)
+  [ -n "$XCODE_APP" ] && export DEVELOPER_DIR="$XCODE_APP/Contents/Developer"
+fi
+
+sim_id() {
+  xcrun simctl list devices available -j | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for runtime, devices in data['devices'].items():
+    if 'iOS' in runtime:
+        for d in devices:
+            if 'iPhone' in d['name'] and d['isAvailable']:
+                print(d['udid']); sys.exit(0)
+sys.exit('no available iPhone simulator')
+"
+}
+
+xcb() {
+  xcodebuild "$1" -project "$PROJECT" -scheme "$SCHEME" \
+    -destination "id=$(sim_id)" -derivedDataPath "$DERIVED" -quiet 2>&1 | tail -40
+}
+
+run_app() {
+  local sim app bundle
+  sim=$(sim_id)
+  app=$(find "$DERIVED" -name "$SCHEME.app" -path "*iphonesimulator*" | head -1)
+  [ -n "$app" ] || { echo "app not built yet; run: ios-build build" >&2; exit 1; }
+  bundle=$(defaults read "$PWD/$app/Info" CFBundleIdentifier)
+  xcrun simctl boot "$sim" 2>/dev/null || true
+  xcrun simctl install "$sim" "$app"
+  xcrun simctl terminate "$sim" "$bundle" 2>/dev/null || true
+  xcrun simctl launch "$sim" "$bundle"
+}
+
+case "${1:-}" in
+  sim) sim_id ;;
+  build) xcb build && echo "BUILD SUCCEEDED" ;;
+  test)
+    if ! xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -qi "tests"; then
+      echo "N/A — no test target in $PROJECT"; exit 2
+    fi
+    xcb test && echo "TESTS SUCCEEDED" ;;
+  run) run_app ;;
+  screenshot)
+    out="${2:?usage: ios-build screenshot <path.png>}"
+    mkdir -p "$(dirname "$out")"
+    run_app
+    sleep 3
+    xcrun simctl io "$(sim_id)" screenshot "$out"
+    echo "saved $out" ;;
+  *) sed -n '2,11p' "$0"; exit 1 ;;
+esac
