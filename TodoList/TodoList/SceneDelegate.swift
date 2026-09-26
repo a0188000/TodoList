@@ -16,7 +16,32 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
         // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
         // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
-        guard let _ = (scene as? UIWindowScene) else { return }
+        guard let windowScene = (scene as? UIWindowScene) else { return }
+
+        #if DEBUG
+        let debugScenario = DebugLaunchScenario.current
+        let store = debugScenario?.makeStore() ?? FileTodoStore()
+        #else
+        let store = FileTodoStore()
+        #endif
+
+        let todoListViewController = TodoListViewController(viewModel: TodoListViewModel(store: store))
+        todoListViewController.tabBarItem = UITabBarItem(title: "待辦", image: UIImage(systemName: "list.bullet"), tag: 0)
+
+        let completedListViewController = CompletedListViewController(viewModel: CompletedListViewModel(store: store))
+        completedListViewController.tabBarItem = UITabBarItem(title: "已完成", image: UIImage(systemName: "checkmark.circle"), tag: 1)
+
+        let tabBarController = UITabBarController()
+        tabBarController.viewControllers = [todoListViewController, completedListViewController]
+
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = tabBarController
+        window.makeKeyAndVisible()
+        self.window = window
+
+        #if DEBUG
+        debugScenario?.apply(tabBarController: tabBarController, todoListViewController: todoListViewController, store: store)
+        #endif
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
