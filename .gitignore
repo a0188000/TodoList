@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+DerivedData/
+.build/
+*.xcscmblueprint
+
+# AI pipeline (local orchestrator state, per-worktree signal files, secrets)
+.pipeline/
+pipeline/state/
+pipeline/.env
+.env
+
+# Python
+__pycache__/

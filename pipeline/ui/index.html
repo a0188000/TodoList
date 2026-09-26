@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Pipeline</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --panel-2: #fafaf8; --border: #e3e2dc; --text: #1d1d1b; --muted: #6d6c66;
+    --accent: #2f5bd3; --accent-soft: #e6ecfb; --ok: #2e7d4f; --ok-soft: #e3f2e8; --warn: #a86200; --warn-soft: #fbf0dc;
+    --bad: #b3261e; --bad-soft: #f9e3e1; --violet: #6b4bc2; --violet-soft: #eee8fa; --code-bg: #f1f0ec;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151514; --panel: #1d1d1c; --panel-2: #232321; --border: #33332f; --text: #ecebe6; --muted: #9c9b94;
+      --accent: #8aa8ff; --accent-soft: #232c45; --ok: #6cc98f; --ok-soft: #1c3226; --warn: #f0b35a; --warn-soft: #3a2d17;
+      --bad: #ff8a80; --bad-soft: #3d1f1d; --violet: #b9a3ff; --violet-soft: #2c2540; --code-bg: #262624;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151514; --panel: #1d1d1c; --panel-2: #232321; --border: #33332f; --text: #ecebe6; --muted: #9c9b94;
+    --accent: #8aa8ff; --accent-soft: #232c45; --ok: #6cc98f; --ok-soft: #1c3226; --warn: #f0b35a; --warn-soft: #3a2d17;
+    --bad: #ff8a80; --bad-soft: #3d1f1d; --violet: #b9a3ff; --violet-soft: #2c2540; --code-bg: #262624;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", sans-serif; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+  .chip { border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; background: var(--panel-2); }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  main { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px; } header { padding: 12px 16px; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  .add { padding: 12px; display: grid; gap: 8px; margin-bottom: 12px; }
+  .add input[type=text] { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--border); background: var(--panel-2); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .btn.bad { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .list { display: grid; gap: 8px; }
+  .ticket { padding: 10px 12px; cursor: pointer; display: grid; gap: 4px; }
+  .ticket.selected { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .ticket .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .key { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .meta { color: var(--muted); font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .note { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .badge { font-size: 11.5px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; border: 1px solid transparent; }
+  .s-queued { background: var(--accent-soft); color: var(--accent); }
+  .s-running { background: var(--ok-soft); color: var(--ok); }
+  .s-running::before { content: "● "; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .s-awaiting_review { background: var(--warn-soft); color: var(--warn); }
+  .s-handed_off { background: var(--violet-soft); color: var(--violet); }
+  .s-blocked, .s-error { background: var(--bad-soft); color: var(--bad); }
+  .s-idle, .s-stopped { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
+  .s-done { background: var(--ok-soft); color: var(--ok); }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .detail { min-width: 0; }
+  .detail-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+  .detail-head h2 { margin: 0; font-size: 17px; }
+  .detail-head a { color: var(--accent); }
+  .tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tab { padding: 9px 12px; border: 0; background: none; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 5px; vertical-align: middle; }
+  .pane { padding: 14px 16px; }
+  pre.log { margin: 0; background: var(--code-bg); border-radius: 8px; padding: 12px; height: 62vh; overflow: auto; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .review-q { background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  .doc-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .doc { border: 1px solid var(--border); border-radius: 8px; padding: 4px 18px 14px; background: var(--panel); max-height: 64vh; overflow: auto; }
+  .doc img { max-width: 100%; border: 1px solid var(--border); border-radius: 6px; }
+  .doc table { border-collapse: collapse; display: block; overflow-x: auto; margin: 8px 0; }
+  .doc th, .doc td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; vertical-align: top; }
+  .doc code { background: var(--code-bg); padding: 1px 4px; border-radius: 4px; font-family: var(--mono); font-size: 12.5px; }
+  .doc pre { background: var(--code-bg); padding: 10px; border-radius: 6px; overflow: auto; }
+  .doc pre code { background: none; padding: 0; }
+  .doc :is(h1,h2,h3,h4) { position: relative; padding-right: 64px; }
+  .cbtn { position: absolute; right: 0; top: 2px; font-size: 11.5px; font-weight: 400; }
+  .cbox { margin: 6px 0 12px; display: grid; gap: 4px; }
+  .cbox[hidden] { display: none; }
+  .cbox textarea, .overview textarea { width: 100%; min-height: 64px; border: 1px solid var(--warn); border-radius: 6px; padding: 6px 8px; background: var(--panel-2); resize: vertical; }
+  .has-comment > .cbtn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .overview { margin-top: 12px; display: grid; gap: 6px; }
+  .overview textarea { border-color: var(--border); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+  .reviewer { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); width: 130px; }
+  table.simple { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.simple th, table.simple td { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: left; vertical-align: top; }
+  .round { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Pipeline</h1>
+  <div class="chips" id="chips"></div>
+  <label class="switch"><input type="checkbox" id="polling"> 自動輪詢 Jira</label>
+</header>
+<main>
+  <section>
+    <div class="card add">
+      <input type="text" id="url" placeholder="貼上 Jira 連結或 key，例如 https://xxx.atlassian.net/browse/KKAPP-1234">
+      <div class="row">
+        <label class="switch muted"><input type="checkbox" id="autostart" checked> 加入後立即開始</label>
+        <button class="btn primary" id="add">加入</button>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </section>
+  <section class="card detail" id="detail"><div class="empty">從左側選擇 ticket，或貼上 Jira 連結加入新 ticket。</div></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const STATE_LABEL = { queued: "排隊中", running: "執行中", awaiting_review: "待審核", handed_off: "已交接 RD", blocked: "卡住", error: "錯誤", idle: "閒置", stopped: "已停止", done: "完成" };
+const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+let state = { tickets: [] }, selected = store.get("selected", null), tab = "log";
+let logRun = null, logOffset = 0, logTimer = null, followLatest = true, reviewDraft = {}, reviewRenderedFor = null;
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600); }
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Pipeline": "1" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+async function refresh() {
+  try { state = await api("/api/state"); } catch (e) { $("#chips").innerHTML = `<span class="chip" style="color:var(--bad)">server 未連線</span>`; return; }
+  const c = state.config;
+  $("#chips").innerHTML = [`model ${c.model}`, `base ${c.base_branch}`, `並行 ${c.max_concurrent}`, c.jira_endpoint ? c.jira_endpoint.replace(/^https?:\/\//, "") : "⚠︎ 未設定 Jira"]
+    .map(x => `<span class="chip">${esc(x)}</span>`).join("");
+  $("#polling").checked = state.polling;
+  renderList();
+  renderDetail();
+}
+
+function renderList() {
+  const list = $("#list");
+  if (!state.tickets.length) { list.innerHTML = `<div class="card empty">尚無 ticket</div>`; return; }
+  list.innerHTML = state.tickets.map(t => `
+    <div class="card ticket ${t.key === selected ? "selected" : ""}" data-key="${esc(t.key)}">
+      <div class="top"><span class="key">${esc(t.key)}</span><span class="badge s-${t.local_state}">${STATE_LABEL[t.local_state] || t.local_state}</span></div>
+      <div class="title">${esc(t.issue?.title)}</div>
+      <div class="meta"><span>${esc(t.issue?.issue_type)}</span><span>Jira：${esc(t.jira_status)}</span>${t.attempt ? `<span>attempt #${t.attempt}</span>` : ""}</div>
+      ${t.note ? `<div class="note">${esc(t.note)}</div>` : ""}
+    </div>`).join("");
+  list.querySelectorAll(".ticket").forEach(el => el.onclick = () => select(el.dataset.key));
+}
+
+function select(key) {
+  if (selected !== key) { selected = key; store.set("selected", key); logRun = null; followLatest = true; logOffset = 0; reviewRenderedFor = null; const t = cur(); tab = t?.local_state === "awaiting_review" ? "review" : "log"; }
+  renderList(); renderDetail(true);
+}
+const cur = () => state.tickets.find(t => t.key === selected);
+
+function renderDetail(force) {
+  const t = cur(), el = $("#detail");
+  if (!t) { el.innerHTML = `<div class="empty">從左側選擇 ticket，或貼上 Jira 連結加入新 ticket。</div>`; return; }
+  const running = t.local_state === "running";
+  const head = `
+    <div class="detail-head">
+      <div class="row"><h2><span class="key">${esc(t.key)}</span> ${esc(t.issue?.title)}</h2><span class="badge s-${t.local_state}">${STATE_LABEL[t.local_state] || t.local_state}</span></div>
+      <div class="meta"><span>${esc(t.issue?.issue_type)}</span><span>Jira：${esc(t.jira_status)}</span><span>Assignee：${esc(t.issue?.assignee || "—")}</span>
+        <a href="${esc(t.issue?.url)}" target="_blank" rel="noopener">在 Jira 開啟 ↗</a></div>
+      ${t.note ? `<div class="note">${esc(t.note)}</div>` : ""}
+      ${t.jira_error ? `<div class="note" style="color:var(--bad)">${esc(t.jira_error)}</div>` : ""}
+      <div class="actions">
+        <button class="btn primary" data-act="start" ${running || t.local_state === "awaiting_review" ? "disabled" : ""}>${t.runs?.length ? "繼續 / 重新派發" : "開始"}</button>
+        <button class="btn bad" data-act="stop" ${running ? "" : "disabled"}>停止</button>
+        <button class="btn" data-act="refresh">同步 Jira</button>
+        <button class="btn" data-act="delete" ${running ? "disabled" : ""}>移除</button>
+      </div>
+    </div>`;
+  const tabs = [["log", "即時 Log"], ["review", "Review"], ["history", "歷程"], ["git", "Git"], ["prompt", "Prompt"]];
+  const tabBar = `<div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${tab === k ? "active" : ""}" data-tab="${k}">${l}${k === "review" && t.review ? '<span class="dot"></span>' : ""}</button>`).join("")}</div>`;
+
+  // Periodic refresh: only update the header (keeps review drafts, scroll position, log stream).
+  const sameView = !force && el.dataset.key === t.key && el.dataset.tab === tab && el.querySelector(".detail-head");
+  const reviewChanged = tab === "review" && reviewRenderedFor !== reviewKey(t);
+  if (sameView && !reviewChanged) {
+    el.querySelector(".detail-head").outerHTML = head; bindHead();
+    const dot = el.querySelector('.tab[data-tab="review"]');
+    if (dot) dot.innerHTML = "Review" + (t.review ? '<span class="dot"></span>' : "");
+    if (tab === "log") { if (!$("#runsel") && t.runs?.length) paneLog(t); else updateRunSelect(t); }
+    return;
+  }
+
+  el.dataset.key = t.key; el.dataset.tab = tab;
+  el.innerHTML = head + tabBar + `<div class="pane" id="pane"></div>`;
+  bindHead();
+  el.querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.tab; reviewRenderedFor = null; renderDetail(true); });
+  ({ log: paneLog, review: paneReview, history: paneHistory, git: paneGit, prompt: panePrompt })[tab](t);
+}
+
+function bindHead() {
+  document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => act(b.dataset.act));
+}
+
+async function act(a) {
+  const t = cur(); if (!t) return;
+  try {
+    if (a === "delete") {
+      if (!confirm(`從清單移除 ${t.key}？`)) return;
+      const rm = confirm("同時刪除該 ticket 的 worktree 工作目錄？（未 push 的變更會遺失）");
+      await api(`/api/tickets/${t.key}/delete`, { remove_workspace: rm });
+      selected = null;
+    } else {
+      await api(`/api/tickets/${t.key}/${a}`, {});
+      if (a === "start") { tab = "log"; logRun = null; followLatest = true; logOffset = 0; }
+    }
+    toast({ start: "已排入派發佇列", stop: "已送出停止", refresh: "已同步 Jira", delete: "已移除" }[a]);
+  } catch (e) { toast(e.message); }
+  await refresh(); renderDetail(true);
+}
+
+/* ---------- log ---------- */
+function paneLog(t) {
+  const runs = t.runs || [];
+  $("#pane").innerHTML = runs.length ? `<div class="row" style="margin-bottom:8px"><select id="runsel" class="reviewer" style="width:auto"></select><span class="muted" id="runinfo"></span></div><pre class="log" id="log"></pre>` : `<div class="empty">尚未執行</div>`;
+  if (!runs.length) return;
+  updateRunSelect(t);
+  $("#runsel").onchange = e => { logRun = e.target.value; followLatest = logRun === runs[runs.length - 1].id; logOffset = 0; $("#log").textContent = ""; pollLog(); };
+  logOffset = 0; pollLog();
+}
+function updateRunSelect(t) {
+  const sel = $("#runsel"); if (!sel) return;
+  const runs = t.runs || [];
+  const latest = runs[runs.length - 1]?.id;
+  if (!logRun || (followLatest && logRun !== latest)) { logRun = latest; logOffset = 0; const pre = $("#log"); if (pre) pre.textContent = ""; }
+  if (sel.options.length !== runs.length || sel.value !== logRun) {
+    sel.innerHTML = runs.slice().reverse().map(r => `<option value="${r.id}">${r.id} · ${esc(r.status_at_start)}${r.outcome ? " → " + (STATE_LABEL[r.outcome] || r.outcome) : ""}</option>`).join("");
+    sel.value = logRun;
+  }
+  const r = runs.find(x => x.id === logRun);
+  $("#runinfo").textContent = r ? (r.ended ? `結束 exit ${r.exit}` : "執行中…") : "";
+}
+async function pollLog() {
+  clearTimeout(logTimer);
+  const t = cur(), pre = $("#log");
+  if (!t || tab !== "log" || !pre) return;
+  try {
+    const d = await api(`/api/tickets/${t.key}/log?run=${encodeURIComponent(logRun || "")}&offset=${logOffset}`);
+    if (d.text) {
+      const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+      pre.textContent += d.text; logOffset = d.offset;
+      if (atBottom) pre.scrollTop = pre.scrollHeight;
+    }
+  } catch {}
+  logTimer = setTimeout(pollLog, 1500);
+}
+
+/* ---------- review ---------- */
+const reviewKey = t => t.review ? `${t.key}|${t.review.at}` : null;
+const slug = s => s.toLowerCase().trim().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 80) || "section";
+
+function dirOf(p) { return p.includes("/") ? p.slice(0, p.lastIndexOf("/") + 1) : ""; }
+function joinPath(base, rel) {
+  const parts = (base + rel).split("/"), out = [];
+  for (const p of parts) { if (p === "..") out.pop(); else if (p !== "." && p !== "") out.push(p); }
+  return out.join("/");
+}
+
+async function paneReview(t) {
+  const pane = $("#pane");
+  if (!t.review) { pane.innerHTML = `<div class="empty">目前沒有待審項目。agent 寫出 <code>.pipeline/discussion_request.json</code> 後會出現在這裡。</div>`; reviewRenderedFor = null; return; }
+  reviewRenderedFor = reviewKey(t);
+  const rv = t.review, docs = [rv.spec_path, ...(rv.extra_paths || [])].filter(Boolean);
+  const draftKey = reviewKey(t);
+  reviewDraft = JSON.parse(store.get("draft:" + draftKey, "{}") || "{}");
+  pane.innerHTML = `
+    <div class="review-q"><strong>${esc(rv.type)}</strong>　${esc(rv.question)}</div>
+    <div class="doc-tabs">${docs.map((d, i) => `<button class="btn small ${i === 0 ? "primary" : ""}" data-doc="${esc(d)}">${esc(d.split("/").pop())}</button>`).join("")}</div>
+    <div class="doc" id="doc"><div class="empty">載入中…</div></div>
+    <div class="overview"><label class="muted">整體意見（Overview）</label><textarea id="overview" placeholder="整體回饋、Open Questions 的回答…"></textarea></div>
+    <div class="actions">
+      <input class="reviewer" id="reviewer" placeholder="Reviewer" value="${esc(store.get("reviewer", "RD"))}">
+      <button class="btn ok" data-decision="approve">Approve</button>
+      <button class="btn warn" data-decision="request_changes">Request changes</button>
+      <button class="btn bad" data-decision="reject">Reject（重做）</button>
+      <span class="muted" id="ccount"></span>
+    </div>`;
+  $("#overview").value = reviewDraft._overview?.text || "";
+  $("#overview").oninput = e => saveDraft("_overview", "Overview", e.target.value);
+  $("#reviewer").onchange = e => store.set("reviewer", e.target.value);
+  pane.querySelectorAll("[data-doc]").forEach(b => b.onclick = () => {
+    pane.querySelectorAll("[data-doc]").forEach(x => x.classList.remove("primary")); b.classList.add("primary"); loadDoc(t, b.dataset.doc);
+  });
+  pane.querySelectorAll("[data-decision]").forEach(b => b.onclick = () => submitReview(t, b.dataset.decision));
+  loadDoc(t, docs[0]);
+  updateCount();
+}
+
+function saveDraft(id, heading, text) {
+  if (text.trim()) reviewDraft[id] = { block_id: id, heading, text }; else delete reviewDraft[id];
+  const t = cur(); store.set("draft:" + reviewKey(t), JSON.stringify(reviewDraft));
+  updateCount();
+}
+function updateCount() {
+  const n = Object.keys(reviewDraft).filter(k => k !== "_overview").length;
+  const c = $("#ccount"); if (c) c.textContent = n ? `${n} 則段落留言` : "";
+}
+
+async function loadDoc(t, path) {
+  const doc = $("#doc");
+  if (!path) { doc.innerHTML = `<div class="empty">discussion_request 沒有指定 spec_path</div>`; return; }
+  const r = await fetch(`/api/tickets/${t.key}/file?path=${encodeURIComponent(path)}`);
+  if (!r.ok) { doc.innerHTML = `<div class="empty">讀不到 ${esc(path)}</div>`; return; }
+  const md = await r.text();
+  doc.innerHTML = window.marked && window.DOMPurify ? DOMPurify.sanitize(marked.parse(md)) : `<pre class="mono">${esc(md)}</pre>`;
+  const base = dirOf(path), prefix = slug(path.split("/").pop().replace(/\.md$/, ""));
+  doc.querySelectorAll("img").forEach(img => {
+    const src = img.getAttribute("src") || "";
+    if (!/^(https?:|data:|\/)/.test(src)) img.src = `/api/tickets/${t.key}/file?path=${encodeURIComponent(joinPath(base, src))}`;
+  });
+  const seen = {};
+  doc.querySelectorAll("h1,h2,h3,h4").forEach(h => {
+    let id = `${prefix}--${slug(h.textContent)}`;
+    seen[id] = (seen[id] || 0) + 1; if (seen[id] > 1) id += `-${seen[id]}`;
+    const heading = h.textContent;
+    const btn = document.createElement("button");
+    btn.className = "btn small cbtn"; btn.textContent = "💬 留言";
+    h.appendChild(btn);
+    const box = document.createElement("div");
+    box.className = "cbox"; box.hidden = !reviewDraft[id];
+    box.innerHTML = `<textarea placeholder="針對「${esc(heading)}」的意見"></textarea>`;
+    h.after(box);
+    const ta = box.querySelector("textarea");
+    ta.value = reviewDraft[id]?.text || "";
+    if (reviewDraft[id]) h.classList.add("has-comment");
+    btn.onclick = () => { box.hidden = !box.hidden; if (!box.hidden) ta.focus(); };
+    ta.oninput = () => { saveDraft(id, heading, ta.value); h.classList.toggle("has-comment", !!ta.value.trim()); };
+  });
+}
+
+async function submitReview(t, decision) {
+  const comments = Object.values(reviewDraft).filter(c => c.block_id !== "_overview");
+  const overview = reviewDraft._overview?.text || "";
+  if (decision !== "approve" && !comments.length && !overview.trim()) { toast("Request changes / Reject 請至少留一則意見"); return; }
+  const label = { approve: "Approve", request_changes: "Request changes", reject: "Reject" }[decision];
+  if (!confirm(`送出 ${label}？（${comments.length} 則段落留言）agent 會立即被重新派發。`)) return;
+  try {
+    await api(`/api/tickets/${t.key}/review`, { decision, overview, comments, reviewer: $("#reviewer").value || "RD" });
+    store.set("draft:" + reviewKey(t), "{}");
+    toast("已送出，agent 重新派發中");
+    tab = "log"; logRun = null; reviewRenderedFor = null;
+  } catch (e) { toast(e.message); }
+  await refresh(); renderDetail(true);
+}
+
+/* ---------- history / git / prompt ---------- */
+function paneHistory(t) {
+  const rounds = t.discussion_history || [], runs = t.runs || [];
+  $("#pane").innerHTML = `
+    <h3 style="margin-top:0">Review 歷程</h3>
+    ${rounds.length ? rounds.map((r, i) => `<div class="round"><div class="row"><strong>Round ${i + 1} · ${esc(r.type)}</strong><span class="badge ${r.decision === "approve" ? "s-done" : r.decision === "reject" ? "s-blocked" : "s-awaiting_review"}">${esc(r.decision)}</span></div>
+      <div class="muted">${esc(r.at)}</div>${r.overview ? `<p>${esc(r.overview)}</p>` : ""}
+      ${(r.comments || []).map(c => `<div class="mono"><strong>${esc(c.heading)}</strong>：${esc(c.text)}</div>`).join("")}</div>`).join("") : `<p class="muted">尚無</p>`}
+    <h3>執行紀錄</h3>
+    <table class="simple"><tr><th>Run</th><th>Jira 狀態</th><th>attempt</th><th>結束</th><th>結果</th></tr>
+    ${runs.slice().reverse().map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.status_at_start)}</td><td>${r.attempt ?? ""}</td><td>${r.ended ? `exit ${r.exit}` : "執行中"}</td><td>${esc(STATE_LABEL[r.outcome] || r.outcome || "")}</td></tr>`).join("")}</table>`;
+}
+async function paneGit(t) {
+  $("#pane").innerHTML = `<div class="empty">載入中…</div>`;
+  try {
+    const g = await api(`/api/tickets/${t.key}/git`);
+    if (!g.branch && !g.head) { $("#pane").innerHTML = `<div class="empty">尚未建立 workspace</div>`; return; }
+    $("#pane").innerHTML = `<p><span class="muted">Workspace</span> <span class="mono">${esc(t.workspace)}</span></p>
+      <p><span class="muted">Branch</span> <span class="mono">${esc(g.branch || "(detached)")}</span>　<span class="muted">HEAD</span> <span class="mono">${esc(g.head)}</span></p>
+      <h4>Commits</h4><pre class="log" style="height:auto;max-height:30vh">${esc(g.log || "—")}</pre>
+      <h4>Diff stat（相對 base）</h4><pre class="log" style="height:auto;max-height:30vh">${esc(g.stat || "—")}</pre>
+      <h4>未提交變更</h4><pre class="log" style="height:auto;max-height:20vh">${esc(g.dirty || "（無）")}</pre>`;
+  } catch (e) { $("#pane").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function panePrompt(t) {
+  try { const d = await api(`/api/tickets/${t.key}/prompt`); $("#pane").innerHTML = `<p class="muted">下一次派發時會送給 claude 的 prompt（依目前狀態即時渲染）</p><pre class="log">${esc(d.prompt)}</pre>`; }
+  catch (e) { $("#pane").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ---------- boot ---------- */
+$("#add").onclick = async () => {
+  const url = $("#url").value.trim(); if (!url) return;
+  $("#add").disabled = true;
+  try { const t = await api("/api/tickets", { url, autostart: $("#autostart").checked }); $("#url").value = ""; toast(`已加入 ${t.key}`); await refresh(); select(t.key); }
+  catch (e) { toast(e.message); }
+  $("#add").disabled = false;
+};
+$("#url").onkeydown = e => { if (e.key === "Enter") $("#add").click(); };
+$("#polling").onchange = async e => { await api("/api/polling", { enabled: e.target.checked }); toast(e.target.checked ? "已開啟自動輪詢" : "已暫停自動輪詢"); };
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

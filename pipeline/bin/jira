@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+"""Minimal Jira Cloud CLI used by the AI pipeline (replaces Symphony's .symphony/bin/jira).
+
+Credentials come from env vars, pipeline/.env, or the repo-root .env (JIRA_TOKEN is accepted as JIRA_API_TOKEN):
+  JIRA_ENDPOINT   e.g. https://your-site.atlassian.net
+  JIRA_EMAIL
+  JIRA_API_TOKEN
+
+Commands:
+  jira issue <KEY>                      raw issue JSON (fields + comments)
+  jira summary <KEY>                    human-readable ticket summary (description/comments as text)
+  jira search '<JQL>'                   search issues (key, type, status, summary)
+  jira transitions <KEY>                list available transitions
+  jira transition <KEY> "<name>"        run transition (matches transition name OR target status)
+  jira comment <KEY> "message"          add a plain-text comment
+  jira attachments <KEY> [dest_dir]     download attachments (default RefDoc_Temp/<KEY>/)
+  jira remotelinks <KEY>                list web links (Figma, Confluence, ...)
+  jira workpad <KEY> <file.md> [--mention-assignee "text"]
+                                        create/update the single "## Claude Workpad" comment from Markdown
+  jira get <path>                       raw GET  (e.g. /rest/api/3/myself)
+  jira post <path> '<json>'             raw POST
+  jira put <path> '<json>'              raw PUT
+"""
+import base64
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+WORKPAD_HEADING = "Claude Workpad"
+
+
+def load_env():
+    pipeline_dir = Path(__file__).resolve().parent.parent
+    for env_file in (pipeline_dir / ".env", pipeline_dir.parent / ".env"):
+        if not env_file.exists():
+            continue
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    if "JIRA_TOKEN" in os.environ:
+        os.environ.setdefault("JIRA_API_TOKEN", os.environ["JIRA_TOKEN"])
+
+
+def die(msg, code=1):
+    print(f"jira: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def request(method, path, body=None, raw=False):
+    endpoint = os.environ.get("JIRA_ENDPOINT", "").rstrip("/")
+    email = os.environ.get("JIRA_EMAIL", "")
+    token = os.environ.get("JIRA_API_TOKEN", "")
+    if not (endpoint and email and token):
+        die("missing JIRA_ENDPOINT / JIRA_EMAIL / JIRA_API_TOKEN (set them in pipeline/.env)")
+    url = path if path.startswith("http") else endpoint + path
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method)
+    auth = base64.b64encode(f"{email}:{token}".encode()).decode()
+    req.add_header("Authorization", f"Basic {auth}")
+    req.add_header("Accept", "application/json")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            content = resp.read()
+            if raw:
+                return content
+            return json.loads(content) if content else {}
+    except urllib.error.HTTPError as e:
+        die(f"HTTP {e.code} {method} {path}: {e.read().decode(errors='replace')[:2000]}")
+
+
+# ---------- ADF -> text ----------
+
+def adf_to_text(node, depth=0):
+    if node is None:
+        return ""
+    if isinstance(node, str):
+        return node
+    t = node.get("type")
+    children = node.get("content", [])
+    if t == "text":
+        text = node.get("text", "")
+        for m in node.get("marks", []):
+            if m.get("type") == "link":
+                text = f"[{text}]({m['attrs'].get('href')})"
+            elif m.get("type") == "code":
+                text = f"`{text}`"
+        return text
+    if t in ("mention",):
+        return node.get("attrs", {}).get("text", "@user")
+    if t in ("inlineCard", "blockCard", "embedCard"):
+        return node.get("attrs", {}).get("url", "")
+    if t == "hardBreak":
+        return "\n"
+    if t == "heading":
+        return "#" * node.get("attrs", {}).get("level", 1) + " " + "".join(adf_to_text(c) for c in children) + "\n\n"
+    if t == "paragraph":
+        return "".join(adf_to_text(c) for c in children) + "\n\n"
+    if t in ("bulletList", "orderedList", "taskList"):
+        out = []
+        for i, item in enumerate(children, 1):
+            prefix = f"{i}." if t == "orderedList" else ("- [x]" if item.get("attrs", {}).get("state") == "DONE" else "- [ ]") if t == "taskList" else "-"
+            body = "".join(adf_to_text(c, depth + 1) for c in item.get("content", [])).strip()
+            out.append("  " * depth + f"{prefix} {body}")
+        return "\n".join(out) + "\n\n"
+    if t == "codeBlock":
+        return "```\n" + "".join(adf_to_text(c) for c in children) + "\n```\n\n"
+    if t == "mediaSingle" or t == "media":
+        return "[media attachment]\n\n"
+    if t == "table":
+        rows = []
+        for r in children:
+            cells = ["".join(adf_to_text(c) for c in cell.get("content", [])).strip().replace("\n", " ") for cell in r.get("content", [])]
+            rows.append("| " + " | ".join(cells) + " |")
+        return "\n".join(rows) + "\n\n"
+    return "".join(adf_to_text(c, depth) for c in children)
+
+
+# ---------- Markdown -> ADF (subset: headings, lists, tasks, code, tables, inline) ----------
+
+INLINE_RE = re.compile(r"(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|@@ASSIGNEE@@)")
+
+
+def inline_nodes(text, mention_id=None):
+    nodes = []
+    for part in INLINE_RE.split(text):
+        if not part:
+            continue
+        if part.startswith("**") and part.endswith("**"):
+            nodes.append({"type": "text", "text": part[2:-2], "marks": [{"type": "strong"}]})
+        elif part.startswith("`") and part.endswith("`"):
+            nodes.append({"type": "text", "text": part[1:-1], "marks": [{"type": "code"}]})
+        elif part.startswith("[") and "](" in part:
+            label, href = part[1:-1].split("](", 1)
+            nodes.append({"type": "text", "text": label, "marks": [{"type": "link", "attrs": {"href": href}}]})
+        elif part == "@@ASSIGNEE@@" and mention_id:
+            nodes.append({"type": "mention", "attrs": {"id": mention_id, "text": "@assignee"}})
+        else:
+            nodes.append({"type": "text", "text": part})
+    return nodes
+
+
+def para(text, mention_id=None):
+    content = inline_nodes(text, mention_id)
+    return {"type": "paragraph", "content": content} if content else {"type": "paragraph"}
+
+
+LIST_RE = re.compile(r"^(\s*)(?:[-*]|\d+\.)\s+(\[[ xX]\]\s+)?(.*)$")
+
+
+def build_list(items):
+    """items: list of (indent, checkbox, text). Returns ADF bulletList with nesting."""
+    def build(idx, level_indent):
+        lst = {"type": "bulletList", "content": []}
+        while idx < len(items):
+            indent, box, text = items[idx]
+            if indent < level_indent:
+                break
+            if indent > level_indent:
+                nested, idx = build(idx, indent)
+                if lst["content"]:
+                    lst["content"][-1]["content"].append(nested)
+                continue
+            mark = ""
+            if box is not None:
+                mark = "☑ " if box.strip().lower() == "[x]" else "☐ "
+            lst["content"].append({"type": "listItem", "content": [para(mark + text)]})
+            idx += 1
+        return lst, idx
+
+    result, _ = build(0, items[0][0])
+    return result
+
+
+def markdown_to_adf(md, mention_id=None):
+    lines = md.splitlines()
+    blocks = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip():
+            i += 1
+            continue
+        fence = re.match(r"^\s*(`{3,})(\w*)\s*$", line)
+        if fence:
+            ticks, lang = fence.group(1), fence.group(2)
+            i += 1
+            code = []
+            while i < len(lines) and not lines[i].strip().startswith(ticks):
+                code.append(lines[i])
+                i += 1
+            i += 1
+            node = {"type": "codeBlock", "content": [{"type": "text", "text": "\n".join(code) or " "}]}
+            if lang:
+                node["attrs"] = {"language": lang}
+            blocks.append(node)
+            continue
+        h = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if h:
+            blocks.append({"type": "heading", "attrs": {"level": len(h.group(1))}, "content": inline_nodes(h.group(2))})
+            i += 1
+            continue
+        if line.lstrip().startswith("|"):
+            rows = []
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                if not all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):
+                    rows.append(cells)
+                i += 1
+            table = {"type": "table", "content": []}
+            for r_idx, cells in enumerate(rows):
+                cell_type = "tableHeader" if r_idx == 0 else "tableCell"
+                table["content"].append({"type": "tableRow", "content": [
+                    {"type": cell_type, "content": [para(c)]} for c in cells]})
+            blocks.append(table)
+            continue
+        if LIST_RE.match(line):
+            items = []
+            while i < len(lines) and LIST_RE.match(lines[i]):
+                m = LIST_RE.match(lines[i])
+                items.append((len(m.group(1).expandtabs(2)), m.group(2), m.group(3)))
+                i += 1
+            blocks.append(build_list(items))
+            continue
+        if line.startswith(">"):
+            quote = []
+            while i < len(lines) and lines[i].startswith(">"):
+                quote.append(lines[i].lstrip("> ").rstrip())
+                i += 1
+            blocks.append({"type": "blockquote", "content": [para(" ".join(quote))]})
+            continue
+        paragraph = [line.strip()]
+        i += 1
+        while i < len(lines) and lines[i].strip() and not re.match(r"^(#{1,6}\s|\s*[-*]\s|\s*\d+\.\s|\||>|\s*`{3})", lines[i]):
+            paragraph.append(lines[i].strip())
+            i += 1
+        blocks.append(para(" ".join(paragraph), mention_id))
+    return {"version": 1, "type": "doc", "content": blocks or [para(" ")]}
+
+
+# ---------- commands ----------
+
+def get_issue(key):
+    return request("GET", f"/rest/api/3/issue/{urllib.parse.quote(key)}?expand=names")
+
+
+def cmd_issue(key):
+    print(json.dumps(get_issue(key), ensure_ascii=False, indent=2))
+
+
+def cmd_summary(key):
+    d = get_issue(key)
+    f = d.get("fields", {})
+    out = [
+        f"Key: {d.get('key')}  (id {d.get('id')})",
+        f"Type: {f.get('issuetype', {}).get('name')}",
+        f"Status: {f.get('status', {}).get('name')}",
+        f"Title: {f.get('summary')}",
+        f"Assignee: {(f.get('assignee') or {}).get('displayName')}",
+        f"Labels: {', '.join(f.get('labels', []))}",
+        f"Links: {', '.join(l.get('outwardIssue', l.get('inwardIssue', {})).get('key', '') for l in f.get('issuelinks', []))}",
+        f"Attachments: {', '.join(a.get('filename') for a in f.get('attachment', []))}",
+        "",
+        "## Description",
+        adf_to_text(f.get("description")).strip() or "(empty)",
+        "",
+        "## Comments",
+    ]
+    for c in f.get("comment", {}).get("comments", []):
+        out.append(f"--- [{c.get('id')}] {c.get('author', {}).get('displayName')} @ {c.get('created')}")
+        out.append(adf_to_text(c.get("body")).strip())
+    print("\n".join(out))
+
+
+def cmd_search(jql):
+    d = request("POST", "/rest/api/3/search/jql", {"jql": jql, "maxResults": 50,
+                                                  "fields": ["summary", "status", "issuetype"]})
+    for it in d.get("issues", []):
+        f = it["fields"]
+        print(f"{it['key']}\t{f['issuetype']['name']}\t{f['status']['name']}\t{f['summary']}")
+
+
+def cmd_transitions(key):
+    d = request("GET", f"/rest/api/3/issue/{key}/transitions")
+    for t in d.get("transitions", []):
+        print(f"{t['id']}\t{t['name']}\t-> {t['to']['name']}")
+
+
+def cmd_transition(key, name):
+    d = request("GET", f"/rest/api/3/issue/{key}/transitions")
+    want = name.strip().lower().replace(" ", "")
+    for t in d.get("transitions", []):
+        if want in (t["name"].lower().replace(" ", ""), t["to"]["name"].lower().replace(" ", ""), t["id"]):
+            request("POST", f"/rest/api/3/issue/{key}/transitions", {"transition": {"id": t["id"]}})
+            print(f"transitioned {key}: {t['name']} -> {t['to']['name']}")
+            return
+    die(f"no transition matching '{name}'. Available: " +
+        ", ".join(f"{t['name']}(->{t['to']['name']})" for t in d.get("transitions", [])))
+
+
+def cmd_comment(key, message):
+    body = {"body": {"version": 1, "type": "doc", "content": [para(message)]}}
+    d = request("POST", f"/rest/api/3/issue/{key}/comment", body)
+    print(d.get("id"))
+
+
+def cmd_attachments(key, dest=None):
+    f = get_issue(key).get("fields", {})
+    dest = Path(dest or f"RefDoc_Temp/{key}")
+    dest.mkdir(parents=True, exist_ok=True)
+    for a in f.get("attachment", []):
+        path = dest / a["filename"]
+        path.write_bytes(request("GET", a["content"], raw=True))
+        print(path)
+    if not f.get("attachment"):
+        print("(no attachments)")
+
+
+def cmd_remotelinks(key):
+    for l in request("GET", f"/rest/api/3/issue/{key}/remotelink"):
+        obj = l.get("object", {})
+        print(f"{obj.get('title')}\t{obj.get('url')}")
+
+
+def cmd_workpad(key, md_file, mention_text=None):
+    md = Path(md_file).read_text()
+    if not md.lstrip().startswith(f"## {WORKPAD_HEADING}"):
+        md = f"## {WORKPAD_HEADING}\n\n" + md
+    issue = get_issue(key)
+    mention_id = None
+    if mention_text is not None:
+        mention_id = (issue["fields"].get("assignee") or {}).get("accountId")
+        md = md.rstrip() + ("\n\n@@ASSIGNEE@@ " if mention_id else "\n\n") + mention_text + "\n"
+    body = {"body": markdown_to_adf(md, mention_id)}
+    existing = None
+    for c in issue["fields"].get("comment", {}).get("comments", []):
+        if adf_to_text(c.get("body")).lstrip().startswith(f"## {WORKPAD_HEADING}"):
+            existing = c["id"]
+            break
+    if existing:
+        request("PUT", f"/rest/api/3/issue/{key}/comment/{existing}", body)
+        print(existing)
+    else:
+        print(request("POST", f"/rest/api/3/issue/{key}/comment", body).get("id"))
+
+
+def main():
+    load_env()
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return
+    cmd, rest = args[0], args[1:]
+    try:
+        if cmd == "issue":
+            cmd_issue(rest[0])
+        elif cmd == "summary":
+            cmd_summary(rest[0])
+        elif cmd == "search":
+            cmd_search(rest[0])
+        elif cmd == "transitions":
+            cmd_transitions(rest[0])
+        elif cmd == "transition":
+            cmd_transition(rest[0], rest[1])
+        elif cmd == "comment":
+            cmd_comment(rest[0], rest[1])
+        elif cmd == "attachments":
+            cmd_attachments(rest[0], rest[1] if len(rest) > 1 else None)
+        elif cmd == "remotelinks":
+            cmd_remotelinks(rest[0])
+        elif cmd == "workpad":
+            mention = None
+            if "--mention-assignee" in rest:
+                i = rest.index("--mention-assignee")
+                mention = rest[i + 1] if i + 1 < len(rest) else ""
+                rest = rest[:i] + rest[i + 2:]
+            cmd_workpad(rest[0], rest[1], mention)
+        elif cmd in ("get", "post", "put"):
+            body = json.loads(rest[1]) if len(rest) > 1 else None
+            print(json.dumps(request(cmd.upper(), rest[0], body), ensure_ascii=False, indent=2))
+        else:
+            die(f"unknown command '{cmd}'. Run `jira help`.")
+    except IndexError:
+        die(f"missing arguments for '{cmd}'. Run `jira help`.")
+
+
+if __name__ == "__main__":
+    main()
