@@ -29,40 +29,55 @@
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| Round 1 | TODO | | 等 review |
+| Round 1 | PASS | `.pipeline/spec_comments/` 為空（無 `_overview.json`、無 section comment） | 沒有需要處理的 comment；spec 不需修改 |
 
 ## Spec Review Verdict Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| Explicit approve | PENDING_REVIEW | `.pipeline/discussion_request.json`（spec_review） | |
+| Explicit approve | PASS | `.pipeline/spec_decision.json`：`approve`，reviewer `RD`，`2026-09-28T20:06:49+08:00` | Open Questions 無 → 沒有 Defaults adopted |
 
 ## Implementation Coverage Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| All implementation phases | TODO | | |
+| P0（G-7、G-8、G-9 N/A、G-10） | PASS | 沒有改 `TodoItem` / `TodoStoring` / `FileTodoStore` / cell / banner；FR-3 由既有 `itemsPublisher` pipeline 提供（AC-4 / AS-06 測試證明） | G-9 N/A：沒有 backend |
+| P1（G-1、G-2、G-4、G-5、G-6） | PASS | commit `5134db1`：`CompletedListViewModel.swift`（State + makeState + didTapDelete）、`DebugLaunchScenario.swift:64`、`CompletedListViewModelTests.swift`（3 個 pattern 更新、3 個新測試、2 個延伸） | TDD：先改測試 → `ios-build test` 編譯失敗（Red）→ 實作後通過（Green） |
+| P2（G-3） | PASS | commit `5134db1`：`CompletedListViewController.swift`（countLabel + headerStack + constraints + render） | 比照 `TodoListViewController.swift:138-188` |
+| 呼叫端完整性 | PASS | `git grep -n "\.content(" -- TodoList`：所有 `CompletedListViewModel.State.content` pattern 都是 2 個 associated value | |
 
 ## Compilation Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| `ios-build build` | TODO | | |
+| `ios-build build` | PASS | `BUILD SUCCEEDED`（HEAD 5134db1 的內容） | 沒有編譯錯誤需要修 |
 
 ## Validation Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| Acceptance Scenarios | TODO | | |
+| Unit tests（AC-6 / AS-07） | PASS | `ios-build test -- -only-testing:TodoListTests/CompletedListViewModelTests` → `TESTS PASSED: passed 43, failed 0, skipped 0` | `-only-testing` 沒有生效（跑了全部 43 個），是 PRD 範圍的超集合 |
+| AS-01 / AC-1 | PASS | `testSingleCompletedItemShowsCountText` | 只有 unit test（沒有 seed） |
+| AS-02 / AC-2 | PASS | `testCountTextExcludesPendingItems` ＋ `RefDoc_Temp/SID-3/validation/AC-2-completed-count.png`（「共完成 3 件」） | |
+| AS-03 / AC-3 | PASS | `testNoCompletedItemsShowsEmptyState` ＋ `validation/AC-3-completed-empty.png`（只有空狀態，沒有數量文字，header 沒有多出空白） | |
+| AS-04 / AC-4 | PASS | `testDeleteUpdatesCountText`（2 → 1）＋ `validation/AC-4-completed-after-delete.png`（3 → 2 ＋「任務已刪除」banner） | |
+| AS-05 / AC-5 | PASS | `testDeleteLastItemShowsEmptyState`（刪除前「共完成 1 件」→ `.empty`） | 最終畫面同 AC-3 截圖 |
+| AS-06（FR-3 完成後增加） | PASS | `testNewlyCompletedItemAppears` 斷言 countText「共完成 1 件」 | |
+| AS-07 / SV-07 刪除失敗 | PASS | `testDeleteFailureKeepsItemAndReportsError`（state 相等比對） | |
+| NFR-1 樣式一致 | PASS | `validation/regression-todo-count.png` 與 AC-2 截圖目視比對：字級 / 顏色 / 間距相同；待辦頁沒有被影響 | |
+| SV-08 Dynamic Type | N/A | 屬性設定與待辦頁相同（`adjustsFontForContentSizeCategory`、`numberOfLines = 0`） | 沒有大字級截圖 hook（spec 已註明） |
 
 ## Self-review Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| `@code-reviewer` | TODO | | |
+| `@code-reviewer` | PASS | Critical 0 / Major 0 / Minor 2（註解用語，不需要修改）；分數約 9.7/10 | 沒有改檔 → 不需要重新 build |
+| Format | N/A | `command -v swiftformat` 沒有輸出 | N/A — swiftformat not installed |
 
 ## Handoff Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| Handoff doc / push / Draft PR / handoff.json | TODO | | |
+| 交接前重新驗證 | PASS | 新 session 在 HEAD `5134db1` 重跑：`ios-build build` → `BUILD SUCCEEDED`；`ios-build test` → `TESTS PASSED: passed 43, failed 0, skipped 0` | |
+| Handoff doc | PASS | `RefDoc_Temp/SID-3_handoff.md`（CODE_SHA `5134db1`） | commit `docs: add handoff document for SID-3` |
+| Push / Draft PR / handoff.json | PASS | `git push origin HEAD:refs/heads/feature/SID-3`；Draft PR 與 `.pipeline/handoff.json` 見 workpad Handoff Summary | |
