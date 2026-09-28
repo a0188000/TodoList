@@ -63,6 +63,13 @@ final class FileTodoStore: TodoStoring {
         items = newItems
     }
 
+    func delete(id: UUID) async throws {
+        guard items.contains(where: { $0.id == id }) else { return }
+        let newItems = items.filter { $0.id != id }
+        try save(newItems)
+        items = newItems
+    }
+
     private func save(_ items: [TodoItem]) throws {
         let data = try JSONEncoder().encode(items)
         try data.write(to: fileURL, options: .atomic)

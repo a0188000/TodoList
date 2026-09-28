@@ -22,7 +22,9 @@ final class TodoListViewModel {
 
     @Published private(set) var state: State = .empty
     @Published private(set) var isAddedBannerVisible = false
-    let completionErrorMessage = PassthroughSubject<String, Never>()
+    @Published private(set) var bannerText = "任務已新增"
+    @Published private(set) var pendingDelete: PendingDelete?
+    let errorMessage = PassthroughSubject<String, Never>()
 
     // MARK: Private
 
@@ -48,7 +50,7 @@ final class TodoListViewModel {
             .assign(to: &$state)
 
         store.addedItemPublisher
-            .sink { [weak self] item in self?.showAddedFeedback(for: item.id) }
+            .sink { [weak self] item in self?.showBanner(text: "任務已新增", recentlyAddedId: item.id) }
             .store(in: &cancellables)
 
         Task { [store] in
@@ -63,9 +65,32 @@ final class TodoListViewModel {
             do {
                 try await store.markCompleted(id: id)
             } catch {
-                self?.completionErrorMessage.send("標記完成失敗，請再試一次")
+                self?.errorMessage.send("標記完成失敗，請再試一次")
             }
             self?.completingIds.remove(id)
+        }
+    }
+
+    func didTapDelete(id: UUID) {
+        guard case let .content(rows, _) = state, let row = rows.first(where: { $0.id == id }) else { return }
+        pendingDelete = PendingDelete(id: id, title: row.title, message: "確定要刪除這筆待辦事項嗎？刪除後無法復原。")
+    }
+
+    func didCancelDelete() {
+        pendingDelete = nil
+    }
+
+    func didConfirmDelete() {
+        // 同步清空，重複確認時直接略過（同一筆只送出一次）。
+        guard let pending = pendingDelete else { return }
+        pendingDelete = nil
+        Task { [weak self, store] in
+            do {
+                try await store.delete(id: pending.id)
+                self?.showBanner(text: "任務已刪除")
+            } catch {
+                self?.errorMessage.send("刪除失敗，請再試一次")
+            }
         }
     }
 
@@ -75,9 +100,11 @@ final class TodoListViewModel {
 
     // MARK: Private
 
-    private func showAddedFeedback(for id: UUID) {
+    /// 新回饋取代正在顯示的回饋；非新增回饋會清除「剛剛新增」標示。
+    private func showBanner(text: String, recentlyAddedId: UUID? = nil) {
         bannerTask?.cancel()
-        recentlyAddedId = id
+        bannerText = text
+        self.recentlyAddedId = recentlyAddedId
         isAddedBannerVisible = true
         bannerTask = Task { [weak self, bannerDuration] in
             try? await Task.sleep(for: bannerDuration)
