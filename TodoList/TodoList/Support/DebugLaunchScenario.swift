@@ -4,33 +4,48 @@
 //
 
 #if DEBUG
+import Combine
 import Foundation
 import UIKit
 
 /// 驗證截圖用的 DEBUG hook（不進 Release）。透過 launch argument 啟動：
-/// `-UI_SCENARIO <empty|content|many>`、`-UI_TAB completed`、`-UI_ADD <open|success>`
+/// `-UI_SCENARIO <empty|content|many>`、`-UI_TAB completed`、`-UI_ADD <open|success>`、
+/// `-UI_DELETE <open|success|failure>`（對目前分頁第一筆執行刪除流程）
 struct DebugLaunchScenario {
     let data: String
     let tab: String?
     let add: String?
+    let delete: String?
 
     static var current: DebugLaunchScenario? {
         let defaults = UserDefaults.standard
         guard let data = defaults.string(forKey: "UI_SCENARIO") else { return nil }
-        return DebugLaunchScenario(data: data, tab: defaults.string(forKey: "UI_TAB"), add: defaults.string(forKey: "UI_ADD"))
+        return DebugLaunchScenario(
+            data: data,
+            tab: defaults.string(forKey: "UI_TAB"),
+            add: defaults.string(forKey: "UI_ADD"),
+            delete: defaults.string(forKey: "UI_DELETE")
+        )
     }
 
-    func makeStore() -> FileTodoStore {
+    func makeStore() -> TodoStoring {
         let fileURL = FileManager.default.temporaryDirectory.appending(path: "ui-scenario.json")
         try? FileManager.default.removeItem(at: fileURL)
         let items = seedItems()
         if !items.isEmpty, let data = try? JSONEncoder().encode(items) {
             try? data.write(to: fileURL)
         }
-        return FileTodoStore(fileURL: fileURL)
+        let store = FileTodoStore(fileURL: fileURL)
+        return delete == "failure" ? FailingDeleteTodoStore(base: store) : store
     }
 
-    func apply(tabBarController: UITabBarController, todoListViewController: TodoListViewController, store: FileTodoStore) {
+    func apply(
+        tabBarController: UITabBarController,
+        todoListViewController: TodoListViewController,
+        todoListViewModel: TodoListViewModel,
+        completedListViewModel: CompletedListViewModel,
+        store: TodoStoring
+    ) {
         if tab == "completed" {
             tabBarController.selectedIndex = 1
         }
@@ -38,10 +53,27 @@ struct DebugLaunchScenario {
             try? await Task.sleep(for: .milliseconds(500))
             switch add {
             case "open":
-                todoListViewController.presentAddTodo()            case "success":
+                todoListViewController.presentAddTodo()
+            case "success":
                 try? await store.add(title: "閱讀 20 分鐘")
             default:
                 break
+            }
+            guard let delete else { return }
+            if tab == "completed" {
+                guard case let .content(rows) = completedListViewModel.state, let row = rows.first else { return }
+                completedListViewModel.didTapDelete(id: row.id)
+                if delete != "open" {
+                    try? await Task.sleep(for: .milliseconds(800))
+                    completedListViewModel.didConfirmDelete()
+                }
+            } else {
+                guard case let .content(rows, _) = todoListViewModel.state, let row = rows.first else { return }
+                todoListViewModel.didTapDelete(id: row.id)
+                if delete != "open" {
+                    try? await Task.sleep(for: .milliseconds(800))
+                    todoListViewModel.didConfirmDelete()
+                }
             }
         }
     }
@@ -76,5 +108,24 @@ struct DebugLaunchScenario {
             return []
         }
     }
+}
+
+/// `-UI_DELETE failure` 用：刪除一律失敗，其餘轉給真正的 store。
+private final class FailingDeleteTodoStore: TodoStoring {
+    struct DeleteError: Error {}
+
+    private let base: FileTodoStore
+
+    init(base: FileTodoStore) {
+        self.base = base
+    }
+
+    var itemsPublisher: AnyPublisher<[TodoItem], Never> { base.itemsPublisher }
+    var addedItemPublisher: AnyPublisher<TodoItem, Never> { base.addedItemPublisher }
+
+    func loadAll() async throws -> [TodoItem] { try await base.loadAll() }
+    func add(title: String) async throws { try await base.add(title: title) }
+    func markCompleted(id: UUID) async throws { try await base.markCompleted(id: id) }
+    func delete(id: UUID) async throws { throw DeleteError() }
 }
 #endif

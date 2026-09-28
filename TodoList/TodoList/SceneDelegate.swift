@@ -20,15 +20,17 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         #if DEBUG
         let debugScenario = DebugLaunchScenario.current
-        let store = debugScenario?.makeStore() ?? FileTodoStore()
+        let store: TodoStoring = debugScenario?.makeStore() ?? FileTodoStore()
         #else
         let store = FileTodoStore()
         #endif
 
-        let todoListViewController = TodoListViewController(viewModel: TodoListViewModel(store: store))
+        let todoListViewModel = TodoListViewModel(store: store)
+        let todoListViewController = TodoListViewController(viewModel: todoListViewModel)
         todoListViewController.tabBarItem = UITabBarItem(title: "待辦", image: UIImage(systemName: "list.bullet"), tag: 0)
 
-        let completedListViewController = CompletedListViewController(viewModel: CompletedListViewModel(store: store))
+        let completedListViewModel = CompletedListViewModel(store: store)
+        let completedListViewController = CompletedListViewController(viewModel: completedListViewModel)
         completedListViewController.tabBarItem = UITabBarItem(title: "已完成", image: UIImage(systemName: "checkmark.circle"), tag: 1)
 
         let tabBarController = UITabBarController()
@@ -40,7 +42,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         self.window = window
 
         #if DEBUG
-        debugScenario?.apply(tabBarController: tabBarController, todoListViewController: todoListViewController, store: store)
+        debugScenario?.apply(
+            tabBarController: tabBarController,
+            todoListViewController: todoListViewController,
+            todoListViewModel: todoListViewModel,
+            completedListViewModel: completedListViewModel,
+            store: store
+        )
         #endif
     }
 

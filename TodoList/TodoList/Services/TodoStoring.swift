@@ -18,4 +18,6 @@ protocol TodoStoring: AnyObject {
     func add(title: String) async throws
     /// 成功保存後才更新 `itemsPublisher`；失敗時資料不變並拋出錯誤。
     func markCompleted(id: UUID) async throws
+    /// 成功保存後才更新 `itemsPublisher`；失敗時資料不變並拋出錯誤。找不到 id 時不做任何事。
+    func delete(id: UUID) async throws
 }

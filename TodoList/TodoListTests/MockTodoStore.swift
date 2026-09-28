@@ -15,6 +15,7 @@ final class MockTodoStore: TodoStoring {
     var shouldFail = false
     private(set) var addCallCount = 0
     private(set) var markCompletedCallCount = 0
+    private(set) var deleteCallCount = 0
     private let addedItemSubject = PassthroughSubject<TodoItem, Never>()
     var now = Date()
 
@@ -43,6 +44,13 @@ final class MockTodoStore: TodoStoring {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].isCompleted = true
         items[index].completedAt = now
+    }
+
+    func delete(id: UUID) async throws {
+        deleteCallCount += 1
+        await Task.yield()
+        if shouldFail { throw SaveError() }
+        items.removeAll { $0.id == id }
     }
 }
 
