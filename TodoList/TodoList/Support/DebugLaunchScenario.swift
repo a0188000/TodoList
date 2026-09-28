@@ -61,7 +61,7 @@ struct DebugLaunchScenario {
             }
             guard let delete else { return }
             if tab == "completed" {
-                guard case let .content(rows) = completedListViewModel.state, let row = rows.first else { return }
+                guard case let .content(rows, _) = completedListViewModel.state, let row = rows.first else { return }
                 completedListViewModel.didTapDelete(id: row.id)
                 if delete != "open" {
                     try? await Task.sleep(for: .milliseconds(800))

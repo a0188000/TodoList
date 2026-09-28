@@ -12,6 +12,7 @@ final class CompletedListViewController: UIViewController {
     private var cancellables = Set<AnyCancellable>()
 
     private let titleLabel = UILabel()
+    private let countLabel = UILabel()
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let emptyLabel = UILabel()
     private let bannerView = UIView()
@@ -59,9 +60,12 @@ final class CompletedListViewController: UIViewController {
         switch state {
         case .empty:
             rows = []
+            countLabel.isHidden = true
             tableView.backgroundView = emptyLabel
-        case let .content(rows):
+        case let .content(rows, countText):
             self.rows = rows
+            countLabel.text = countText
+            countLabel.isHidden = false
             tableView.backgroundView = nil
         }
         tableView.reloadData()
@@ -119,6 +123,16 @@ final class CompletedListViewController: UIViewController {
         titleLabel.adjustsFontForContentSizeCategory = true
         titleLabel.accessibilityTraits = .header
 
+        // 與待辦頁數量文字同樣式（SID-3 PRD §5）。
+        countLabel.font = .preferredFont(forTextStyle: .subheadline)
+        countLabel.adjustsFontForContentSizeCategory = true
+        countLabel.textColor = .secondaryLabel
+        countLabel.numberOfLines = 0
+
+        let headerStack = UIStackView(arrangedSubviews: [titleLabel, countLabel])
+        headerStack.axis = .vertical
+        headerStack.spacing = 4
+
         tableView.backgroundColor = .clear
         tableView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 24, bottom: 0, trailing: 24)
         tableView.insetsLayoutMarginsFromSafeArea = false
@@ -143,20 +157,20 @@ final class CompletedListViewController: UIViewController {
         bannerView.alpha = 0
         bannerView.isUserInteractionEnabled = false
 
-        for subview in [titleLabel, tableView, bannerView, bannerLabel] as [UIView] {
+        for subview in [headerStack, tableView, bannerView, bannerLabel] as [UIView] {
             subview.translatesAutoresizingMaskIntoConstraints = false
         }
-        view.addSubview(titleLabel)
+        view.addSubview(headerStack)
         view.addSubview(tableView)
         view.addSubview(bannerView)
         bannerView.addSubview(bannerLabel)
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            titleLabel.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
-            titleLabel.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
+            headerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            headerStack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+            headerStack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
 
-            tableView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
+            tableView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),

@@ -19,7 +19,7 @@ final class CompletedListViewModelTests: XCTestCase {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
     }
 
-    // AC-19
+    // AC-19 / SID-3 AC-3：沒有已完成時為空狀態（不帶數量文字）
     // 建立 ViewModel 的測試皆為 async：iOS 26.3 simulator runtime 在 XCTest 同步方法中釋放
     // MainActor-isolated 物件會於 swift_task_deinitOnExecutor 崩潰（malloc abort）。
     func testNoCompletedItemsShowsEmptyState() async {
@@ -42,7 +42,7 @@ final class CompletedListViewModelTests: XCTestCase {
         let viewModel = CompletedListViewModel(store: store, dateFormatter: formatter)
         viewModel.viewDidLoad()
 
-        guard case let .content(rows) = viewModel.state else {
+        guard case let .content(rows, _) = viewModel.state else {
             return XCTFail("expected content state")
         }
         XCTAssertEqual(rows.map(\.title), ["今天", "昨天", "更早"])
@@ -59,10 +59,67 @@ final class CompletedListViewModelTests: XCTestCase {
 
         try await store.markCompleted(id: item.id)
 
-        guard case let .content(rows) = viewModel.state else {
+        guard case let .content(rows, countText) = viewModel.state else {
             return XCTFail("expected content state")
         }
         XCTAssertEqual(rows.map(\.id), [item.id])
+        XCTAssertEqual(countText, "共完成 1 件")
+    }
+
+    // MARK: SID-3 完成數量
+
+    // SID-3 AC-1
+    func testSingleCompletedItemShowsCountText() async {
+        let store = MockTodoStore(items: [
+            makeItem("繳電話費", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 26)),
+        ])
+        let viewModel = CompletedListViewModel(store: store)
+        viewModel.viewDidLoad()
+
+        guard case let .content(_, countText) = viewModel.state else {
+            return XCTFail("expected content state")
+        }
+        XCTAssertEqual(countText, "共完成 1 件")
+    }
+
+    // SID-3 AC-2：未完成不計入
+    func testCountTextExcludesPendingItems() async {
+        let store = MockTodoStore(items: [
+            makeItem("繳電話費", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 26)),
+            makeItem("預約牙醫", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 25)),
+            makeItem("寄出包裹", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 24)),
+            makeItem("買牛奶", createdAt: date(2026, 9, 26)),
+            makeItem("整理桌面", createdAt: date(2026, 9, 26)),
+        ])
+        let viewModel = CompletedListViewModel(store: store)
+        viewModel.viewDidLoad()
+
+        guard case let .content(_, countText) = viewModel.state else {
+            return XCTFail("expected content state")
+        }
+        XCTAssertEqual(countText, "共完成 3 件")
+    }
+
+    // SID-3 AC-4：刪除後數量即時更新
+    func testDeleteUpdatesCountText() async {
+        let first = makeItem("繳電話費", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 26))
+        let second = makeItem("預約牙醫", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 25))
+        let store = MockTodoStore(items: [first, second])
+        let viewModel = CompletedListViewModel(store: store)
+        viewModel.viewDidLoad()
+        guard case let .content(_, countBefore) = viewModel.state else {
+            return XCTFail("expected content state")
+        }
+        XCTAssertEqual(countBefore, "共完成 2 件")
+
+        viewModel.didTapDelete(id: first.id)
+        viewModel.didConfirmDelete()
+        await drainTasks()
+
+        guard case let .content(_, countAfter) = viewModel.state else {
+            return XCTFail("expected content state")
+        }
+        XCTAssertEqual(countAfter, "共完成 1 件")
     }
 
     // MARK: SID-2 刪除
@@ -105,7 +162,7 @@ final class CompletedListViewModelTests: XCTestCase {
         viewModel.didConfirmDelete()
         await drainTasks()
 
-        guard case let .content(rows) = viewModel.state else {
+        guard case let .content(rows, _) = viewModel.state else {
             return XCTFail("expected content state")
         }
         XCTAssertEqual(rows.map(\.id), [second.id])
@@ -132,12 +189,16 @@ final class CompletedListViewModelTests: XCTestCase {
         XCTAssertEqual(store.items.map(\.id), [first.id])
     }
 
-    // SID-2 SV-19：刪除最後一筆進入空狀態
+    // SID-2 SV-19 / SID-3 AC-5：刪除最後一筆進入空狀態，數量文字隱藏
     func testDeleteLastItemShowsEmptyState() async {
         let item = makeItem("繳電話費", createdAt: date(2026, 9, 1), completedAt: date(2026, 9, 26))
         let store = MockTodoStore(items: [item])
         let viewModel = CompletedListViewModel(store: store)
         viewModel.viewDidLoad()
+        guard case let .content(_, countText) = viewModel.state else {
+            return XCTFail("expected content state")
+        }
+        XCTAssertEqual(countText, "共完成 1 件")
 
         viewModel.didTapDelete(id: item.id)
         viewModel.didConfirmDelete()
