@@ -15,7 +15,7 @@ final class CompletedListViewModel {
 
     enum State: Equatable {
         case empty
-        case content(rows: [Row])
+        case content(rows: [Row], countText: String)
     }
 
     // MARK: Output
@@ -53,7 +53,7 @@ final class CompletedListViewModel {
     }
 
     func didTapDelete(id: UUID) {
-        guard case let .content(rows) = state, let row = rows.first(where: { $0.id == id }) else { return }
+        guard case let .content(rows, _) = state, let row = rows.first(where: { $0.id == id }) else { return }
         pendingDelete = PendingDelete(id: id, title: row.title, message: "確定要刪除這筆已完成事項嗎？刪除後無法復原。")
     }
 
@@ -95,6 +95,6 @@ final class CompletedListViewModel {
             }
             .sorted { $0.completedAt > $1.completedAt }
             .map { Row(id: $0.item.id, title: $0.item.title, completedText: dateFormatter.string(from: $0.completedAt)) }
-        return rows.isEmpty ? .empty : .content(rows: rows)
+        return rows.isEmpty ? .empty : .content(rows: rows, countText: "共完成 \(rows.count) 件")
     }
 }
