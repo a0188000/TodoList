@@ -325,6 +325,17 @@ def agent_env(key):
     return env
 
 
+def select_model(t):
+    """A ticket already handed off (and not sent to Rework / a recheck state) only re-confirms the PR and
+    handoff.json, so it runs on the cheaper handoff model."""
+    agent = CONFIG["agent"]
+    runs = t.get("runs") or []
+    followup = {norm(s) for s in CONFIG["tracker"]["recheck_states"]} | {norm("Rework")}
+    if runs and runs[-1].get("outcome") == "handed_off" and norm(t.get("jira_status")) not in followup:
+        return agent.get("handoff_model", agent["model"])
+    return agent["model"]
+
+
 def dispatch(key):
     with LOCK:
         t = TICKETS[key]
@@ -346,17 +357,18 @@ def dispatch(key):
         for stale in ("discussion_request.json", "handoff.json", "blocked.json"):
             (ws / SIGNAL_DIR / stale).unlink(missing_ok=True)
         run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        model = select_model(t)
         t.setdefault("runs", []).append({"id": run_id, "started": now_iso(), "status_at_start": t.get("jira_status"),
-                                         "attempt": t.get("attempt", 0)})
+                                         "attempt": t.get("attempt", 0), "model": model})
         t["last_dispatch_status"] = t.get("jira_status")
         save()
 
     agent = CONFIG["agent"]
     cc = CONFIG["claude_code"]
     cmd = [cc["command"], "-p", "--output-format", "stream-json", "--verbose",
-           "--model", agent["model"], "--max-turns", str(agent["max_turns"]),
+           "--model", model, "--max-turns", str(agent["max_turns"]),
            *cc.get("permission_args", []), *permission_list_args(), *cc.get("extra_args", [])]
-    log_line(key, run_id, f"▶️ dispatch {key} status={t.get('jira_status')} attempt={t.get('attempt', 0)} ws={ws}")
+    log_line(key, run_id, f"▶️ dispatch {key} status={t.get('jira_status')} attempt={t.get('attempt', 0)} model={model} ws={ws}")
     proc = subprocess.Popen(cmd, cwd=ws, env=agent_env(key), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
     proc.stdin.write(prompt)

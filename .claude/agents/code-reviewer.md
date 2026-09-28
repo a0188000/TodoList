@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: 統一 Code Review 專家。單一審查涵蓋 Security、Performance、Logic、Style、Testing 五大維度，產出含評分的統一報告。用於 WORKFLOW Feature Step 2.6 / Bug 修正後的 self-review。
-model: sonnet
+model: claude-opus-5-5
 color: red
 ---
 
