@@ -42,29 +42,44 @@
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| (filled at Step 2.1) | TODO | | |
+| P0 G-01、G-04、G-09、G-10（沿用 / N/A） | PASS | 無程式變更；empty / count 由 `testDeleteLastItemShowsEmptyState`（兩 VM）覆蓋 | G-04 BE N/A |
+| P1 G-02、G-03、G-11、G-12 Store | PASS | `TodoStoring.swift`、`FileTodoStore.swift`、`MockTodoStore.swift`、`FileTodoStoreTests`（3 tests） | commit `4715a06` |
+| P2 G-05、G-06、G-13 ViewModel | PASS | `TodoListViewModel.swift`、`CompletedListViewModel.swift`、`PendingDelete.swift`；VM tests 8 + 5 | `completionErrorMessage` → `errorMessage`（AD-03） |
+| P3 G-07、G-08 View | PASS | 兩個 VC delegate + swipe + 反應式 alert + banner；`DeleteSwipeActionTests`（2 tests） | full swipe 關閉、取消收合（OQ-04/05） |
+| P4 G-14 DEBUG hook | PASS | `DebugLaunchScenario.swift` `-UI_DELETE <open\|success\|failure>` + `FailingDeleteTodoStore`；`SceneDelegate.swift` | |
 
 ## Compilation Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| `ios-build build` | TODO | | |
+| `ios-build build` | PASS | `BUILD SUCCEEDED`，sim `3BEBA0CE-DF13-42C5-9B6A-A18A8E3D5407`，HEAD `4715a06` | 無編譯錯誤需修 |
 
 ## Validation Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| Unit tests | TODO | | |
-| UI scenarios | TODO | | |
+| Unit tests | PASS | `ios-build test` → `TESTS PASSED: passed 40, failed 0` | 含 self-review 後新增 Completed 同名刪除 test |
+| AC-01 左滑單一 destructive「刪除」 | PASS（unit）/ BLOCKED-by-test-harness（手勢截圖） | `DeleteSwipeActionTests` | OQ-08：RD 手動補證 |
+| AC-02 滑回收合 | BLOCKED-by-test-harness | 系統 swipe 行為 | OQ-08：RD 手動 |
+| AC-03 dialog（兩分頁） | PASS | `validation/AC-03-todo.png`、`AC-03-completed.png` + VM tests | |
+| AC-04 取消不變 | PASS | `testCancelDeleteKeepsEverything`、`testTapDeleteShowsConfirmationAndCancelKeepsItems` | 收合為手動驗證 |
+| AC-05 只刪目標、防重複 | PASS | `testRepeatedConfirmDeletesOnce`、`testConfirmDeleteRemovesTargetWithoutAffectingPending` | |
+| AC-06 待辦 3→2 + banner | PASS | `validation/AC-06-todo-success.png`、`testConfirmDeleteRemovesTargetAndShowsBanner` | |
+| AC-07 已完成刪除不影響待辦 | PASS | `validation/AC-07-completed-success.png` + VM test | |
+| AC-08 同名只刪一筆 | PASS | Store + 兩 VM tests | |
+| AC-09 重開不出現 | PASS（unit） | `testDeleteRemovesOnlyTargetAndSurvivesRelaunch` | 實機重開為 RD 手動補充 |
+| AC-10 失敗（兩分頁） | PASS | `validation/AC-10-todo-failure.png`、`AC-10-completed-failure.png` + Store / VM tests | |
+| Regression：新增 banner | PASS | `validation/regression-add-success.png` | |
+| Format | N/A | `command -v swiftformat` 無輸出 | swiftformat not installed |
 
 ## Self-review Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| @code-reviewer | TODO | | |
+| @code-reviewer | PASS | 7.5/10；Critical 0；Major 1、Minor 4 | 補 Completed 同名 test；Major（alert 已顯示時錯誤訊息被丟棄）屬 SID-1 既有 `showError` 語意、UI 上不可達於刪除流程 → 列入 handoff Remaining；其餘 Minor 記錄於 handoff |
 
 ## Handoff Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| Handoff doc / push / Draft PR / handoff.json | TODO | | |
+| Handoff doc / push / Draft PR / handoff.json | PASS | `RefDoc_Temp/SID-2_handoff.md`；push `feature/SID-2`；Draft PR 見 workpad | |
