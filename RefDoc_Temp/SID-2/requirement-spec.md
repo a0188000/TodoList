@@ -109,7 +109,7 @@ PRD 內部需釐清之處（非 Figma 衝突，單一來源資訊不足，已轉
 | SV-02 | 待辦 | 左滑露出刪除 | 對單列左滑 | `11:2`、§3.1-01 | 目標列右側紅色「刪除」 | 僅目標列；資料不變 | AC-01 |
 | SV-03 | 待辦 | 收合 | 將已左滑列滑回 | §3.1-01 | 按鈕收合 | 資料不變 | AC-02 |
 | SV-04 | 待辦 | 確認 dialog | 點「刪除」 | `12:2`、§3.2 | dialog（title＝todo title、待辦文案） | 資料未變更 | AC-03 |
-| SV-05 | 待辦 | 取消 | dialog 點「取消」 | §3.1-04 | dialog 關閉；cell 狀態依 OQ-04 | 資料 / 數量不變 | AC-04 |
+| SV-05 | 待辦 | 取消 | dialog 點「取消」 | §3.1-04 | dialog 關閉；「刪除」收合（OQ-04） | 資料 / 數量不變 | AC-04 |
 | SV-06 | 待辦 | 刪除中 | 點「確認」後、保存完成前 | DEL-08 | N/A (no design)；無可見差異 | 同一筆不重複送出 | AC-05 |
 | SV-07 | 待辦 | 成功（N → N−1，N−1 ≥ 1） | 確認且保存成功 | `12:53`、§4.1 | 列消失、其餘上移、數量 −1、「任務已刪除」 | 只刪目標 id | AC-05、AC-06 |
 | SV-08 | 待辦 | 成功後為空（1 → 0） | 刪除最後一筆 | 既有空狀態（SID-1） | 「目前沒有待辦事項」、數量隱藏、仍顯示「任務已刪除」；N/A (no design) | 沿用既有 empty | AC-06 |
@@ -174,7 +174,7 @@ Figma 截圖：N/A — no Figma tool；以上 node id 供 RD 視覺比對。
 ### AC-04 點擊取消
 - Given dialog 顯示中
 - When 點擊「取消」
-- Then dialog 關閉；原項目、清單與數量不變；cell 狀態依 OQ-04
+- Then dialog 關閉；原項目、清單與數量不變；該列「刪除」按鈕收合（OQ-04 RD 決議）
 - 對應：DEL-04；SV-05、SV-16
 - 驗證：ViewModel unit test（取消後 state 不變、store 刪除呼叫次數 0）
 
@@ -242,6 +242,21 @@ SV-01~22 皆有對應 AC。SV-06 / SV-17（刪除中）無可見差異，以 uni
 | OQ-06 | 刪除失敗回饋形式（alert / banner）與按鈕文案 | AC-10 | 比照 SID-1 完成失敗：系統 alert，title「刪除失敗，請再試一次」，按鈕「好」；兩分頁一致 | PM | 不阻擋（採預設） |
 | OQ-07 | Figma 無法讀取：刪除按鈕色值、dialog 元件（系統 alert 或自訂）、回饋樣式、刪除動畫皆未知 | 視覺還原、截圖驗收 | 系統 destructive swipe action（系統紅）+ 系統 alert（取消 cancel style、確認 destructive style）；列移除動畫不強制 | RD（提供截圖或 token）/ Design | Validation Gate 視覺驗收；不阻擋功能 |
 | OQ-08 | 左滑狀態（AC-01 / AC-02）截圖證據：專案無 UI test target，`simctl` 無法模擬滑動，swipe 狀態無法由 DEBUG hook 直接呈現 | AC-01、AC-02 驗證證據 | swipe configuration 以 VC 層 unit test 驗證；左滑 / 收合截圖由 RD 手動補充，於 handoff 標示 | RD | Validation Gate |
+
+### RD 回覆（Spec Review Round 1 — approve，RD，2026-09-28T15:57:19+08:00）
+
+| ID | 狀態 | 決議 |
+|----|------|------|
+| OQ-01 | Resolved — 照建議 | 沿用待辦頁 banner 樣式、約 3 秒，「任務已刪除」取代顯示中的回饋 |
+| OQ-02 | Resolved — 照建議 | 已完成頁刪除成功也顯示「任務已刪除」 |
+| OQ-03 | Resolved — 不新增 | 已完成頁不新增數量 / 摘要 |
+| OQ-04 | Resolved — **改為收合** | 點「取消」後，該列的「刪除」按鈕收合（非建議預設的保持露出） |
+| OQ-05 | Resolved — 關閉 full swipe | 不可由完整左滑直接觸發刪除，一律需點擊「刪除」按鈕 |
+| OQ-06 | Resolved — 照建議 | 系統 alert「刪除失敗，請再試一次」+「好」 |
+| OQ-07 | Resolved — 照建議 | 系統 destructive swipe action + 系統 alert |
+| OQ-08 | Resolved — 照建議 | swipe configuration 以 VC 層 unit test 驗證；左滑 / 收合截圖由 RD 手動補充 |
+
+Overview comment「OQ-10 照建議」：本 spec 無 OQ-10，無對應動作（記錄於 workpad Confusions）。
 
 ### 掃描紀錄
 - PRD：全文 3 頁，關鍵字見 Source A。

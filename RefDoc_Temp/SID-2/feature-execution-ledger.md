@@ -30,13 +30,13 @@
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| (no rounds yet) | N/A | | |
+| Round 1 comments processed (approve with comments) | PASS | `.pipeline/spec_comments/_overview.json`, `requirement-spec--source-b-分析後仍未決.json` → `requirement-spec.md` § RD 回覆、AC-04、SV-05；`codebase-analysis.md` AD-04、Acceptance Criteria | OQ-04 changed to collapse on cancel; OQ-01~03/05~08 per default; "OQ-10" has no matching OQ (no-op) |
 
 ## Spec Review Verdict Gate
 
 | Required item | Status | Evidence | Notes |
 |---------------|--------|----------|-------|
-| RD approve | PENDING_REVIEW | `.pipeline/discussion_request.json` (spec_review) | Waiting for dashboard verdict |
+| RD approve | PASS | `.pipeline/spec_decision.json` — decision `approve`, reviewer RD, 2026-09-28T15:57:19+08:00 | |
 
 ## Implementation Coverage Gate
 

@@ -109,6 +109,7 @@
 ### AD-04 VC：swipe / alert / 失敗順序
 - 兩個 VC 新增 `UITableViewDelegate` 並設定 `tableView.delegate = self`；實作 `tableView(_:trailingSwipeActionsConfigurationForRowAt:)`，回傳單一 `UIContextualAction(style: .destructive, title: "刪除")` 組成的 `UISwipeActionsConfiguration`，並設 `performsFirstActionWithFullSwipe = false`（採納 OQ-05）。
 - Action handler 呼叫 `viewModel.didTapDelete(id:)` 後一律 `completion(false)`（不是 `completion(true)`）：實際刪除發生在確認 dialog 之後，這裡只是開 dialog，`completion(false)` 讓該列維持露出「刪除」；取消後列自然保持露出——**直接等於 OQ-04 建議的預設「依原型保持露出」，不是退而求其次的 fallback**。確認成功後 state 改變觸發 `reloadData()`，該列直接消失，swipe 是否收合已無意義。
+- **RD 決議覆寫（Spec Review Round 1）**：OQ-04 改為「取消後收合」。實作方式：VC 在 `pendingDelete` 變回 nil 時呼叫 `tableView.setEditing(false, animated: true)` 收起 swipe 狀態（取消與確認皆適用）。
 - Alert 呈現改為**反應式**（訂閱驅動，非一次性事件）：VC 訂閱 `viewModel.$pendingDelete`；變非 nil 且 `presentedViewController == nil` 時 present 確認 alert，並以 `weak var deleteConfirmAlert` 記住這顆 alert；變回 nil 時，若目前呈現的正是它，主動 `dismiss(animated:)`。alert 的「取消」「確認」action 只呼叫對應 VM input，不在 closure 內自行 dismiss。
 - 好處：`didConfirmDelete()`（AD-02）一進入就同步把 `pendingDelete` 設 nil，VC 立刻反應式收起 confirm alert，不必等 `UIAlertController` 自己的 dismiss 動畫跑完——解決 codebase-analysis「風險 3」：確認 alert 尚未真正 dismiss、導致失敗 alert 被 `showError` 的 `presentedViewController != nil` guard 擋掉（直接違反 AC-10）。
 - 防禦性補強：`showError`（兩個 VC 都需要，Completed 目前沒有、需新增）從「`presentedViewController != nil` 時直接 return（略過）」改為「若目前有呈現中的 alert，先 `dismiss(animated: false)` 再 present 新的」，作為上面反應式 dismiss 之外的第二層保險。這是必要修正，不是順手重構。
@@ -170,7 +171,7 @@
 沿用 PRD §5 AC-01～AC-10（Given/When/Then 見 `requirement-spec.md` §6），外加 spec 預設值：
 - OQ-01 / OQ-02：兩分頁成功後皆顯示「任務已刪除」banner（約 3 秒），取代顯示中的「任務已新增」。
 - OQ-03：已完成頁不新增數量 / 摘要。
-- OQ-04 / OQ-05：取消後該列保持露出「刪除」；關閉 full swipe。
+- OQ-04 / OQ-05（RD 決議）：取消後該列「刪除」收合；關閉 full swipe，一律點擊按鈕觸發。
 - OQ-06：失敗以系統 alert「刪除失敗，請再試一次」+「好」呈現。
 - OQ-07：系統 destructive swipe action + 系統 alert（確認為 destructive style）。
 
