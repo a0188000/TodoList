@@ -287,8 +287,8 @@
 
 <!-- 1 ─────────────────────────────── -->
 <section class="slide title-slide" data-title="封面">
-  <p class="eyebrow">資深 iOS 工程師面試 · AI 實作分享</p>
-  <h1>讓 AI 接手 Jira 票<br><span>TodoList 自動化開發 Pipeline</span></h1>
+  <p class="eyebrow">AI 實作分享</p>
+  <h1>讓 AI 接手 Jira 票<br><span>自動化開發 Pipeline</span></h1>
   <p class="lead">無人值守的 Claude Code agent 負責規格、實作與驗證;<br>人負責核准規格與最後交付。</p>
   <div class="board" aria-label="目前 Jira 看板欄位">
     <div class="col">待辦事項<small>進件</small></div><span class="arr">→</span>
@@ -305,8 +305,8 @@
 </section>
 
 <!-- 2 ─────────────────────────────── -->
-<section class="slide" data-title="30 秒版本">
-  <header class="s-head"><p class="eyebrow">概要</p><h2>30 秒版本</h2></header>
+<section class="slide" data-title="30 秒自動派發">
+  <header class="s-head"><p class="eyebrow">概要</p><h2>30 秒自動派發</h2></header>
   <div class="body">
     <p class="quote">RD 在 dashboard 貼上 Jira 連結,本機的 <b>orchestrator</b> 就在<b>獨立的 git worktree</b> 裡啟動無人值守的 Claude Code;agent 寫完規格會<b>停下來等人核准</b>,核准後再實作、編譯、在模擬器上截圖驗證,最後把分支交還給 RD。</p>
     <div class="facts" style="grid-template-columns:repeat(3,1fr)">
@@ -317,7 +317,7 @@
   </div>
   <footer class="s-foot"><span class="src">pipeline/config.json · hooks · WORKFLOW.md · Orchestrator contract</span><span class="pgno"></span></footer>
   <aside class="notes">
-    <p>如果面試官只給我 30 秒,我會這樣講(照投影片上那段唸即可)。</p>
+    <p>如果只有 30 秒,我會這樣講(照投影片上那段唸即可)。</p>
     <p>三個數字各代表一個設計重點:<b>1:1 worktree</b> 是隔離;<b>3 種 signal file</b> 是 agent 跟系統的溝通協定;<b>2 道人工關卡</b>是我對 AI 的信任邊界。後面每一頁都在展開這四件事。</p>
   </aside>
 </section>
@@ -599,7 +599,7 @@
     <p>這是我最想強調的設計決定:<b>agent 跟 orchestrator 之間沒有 API,只有檔案。</b></p>
     <p>agent 是無人值守的 CLI process,我不想讓它握著長連線等人。所以它只能做一件事:寫一個 JSON、結束。orchestrator 在 process 結束後讀檔,<b>讀完就搬到 history</b>,像一次性的信箱。</p>
     <p>好處是非常好 debug:每一輪留下什麼、決定是什麼,都是硬碟上的檔案。代價是 agent 不能中途發問,所以我把「需要人」的點都設計成明確的停止點。</p>
-    <p>有 iOS 背景的面試官可以類比成:比起 delegate 回呼,更像 App 之間用檔案或 URL scheme 交換結果,兩邊生命週期完全解耦。</p>
+    <p>用 iOS 的角度可以類比成:比起 delegate 回呼,更像 App 之間用檔案或 URL scheme 交換結果,兩邊生命週期完全解耦。</p>
   </aside>
 </section>
 
@@ -841,7 +841,7 @@
   </table>
   <footer class="s-foot"><span class="src">WORKFLOW.md · Default posture · pipeline/config.json</span><span class="pgno"></span></footer>
   <aside class="notes">
-    <p>資深職位的面試,我覺得比起「做了什麼」,更重要的是<b>「為什麼這樣做、放棄了什麼」</b>。</p>
+    <p>我覺得比起「做了什麼」,更重要的是<b>「為什麼這樣做、放棄了什麼」</b>。</p>
     <p>挑一兩個講就好,我最推薦講第三列:用檔案溝通。還有第五列:<b>流程規則放在 repo 裡</b>,所以改流程就跟改程式一樣要發 PR、被 review,orchestrator 只負責派工和提供審核介面。</p>
   </aside>
 </section>
@@ -871,7 +871,7 @@
   </div>
   <footer class="s-foot"><span class="src">.github/(目前為空) · config.json · max_concurrent_agents</span><span class="pgno"></span></footer>
   <aside class="notes">
-    <p>最後我會主動講限制,因為這通常是面試官最想聽的部分。</p>
+    <p>最後我會主動講限制,說清楚這套系統目前做不到什麼。</p>
     <p>最重要的一條:<b>gate 目前是君子協定。</b>agent 如果不老實,orchestrator 不會發現。下一步是讓 orchestrator 自己讀 ledger,缺證據就不收 handoff——把信任從 prompt 移到程式碼。</p>
     <p>第二條:<b>我還沒有量化成效。</b>我不會說省了多少百分比,因為沒量過;但 stream-json 裡本來就有結果事件,要記錄耗時和用量不難。</p>
   </aside>
@@ -891,7 +891,7 @@
   <footer class="s-foot"><span class="src">ai-pipeline-interview-brief.md</span><span class="pgno"></span></footer>
   <aside class="notes">
     <p>這頁不一定要秀出來,可以當成自己的小抄。</p>
-    <p>被問到數字時,<b>寧可說「沒量過」也不要編</b>;資深面試官很容易追問量測方法。</p>
+    <p>被問到數字時,<b>寧可說「沒量過」也不要編</b>;聽眾很容易追問量測方法。</p>
     <p>收尾一句:設計 AI 系統的重點不在 prompt 寫多漂亮,而在狀態、停止點和信任邊界要清楚。謝謝。</p>
   </aside>
 </section>
